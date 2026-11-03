@@ -24,9 +24,10 @@ The estimate uses the weighted acceptance areas in `PROGRESS.md`:
 - Out-of-range decimal floating-point literals are rejected during semantic analysis.
 - Local variables, parameters, and loop bindings receive stable IDs that are checked through HIR lowering and independent HIR verification.
 - The library can be installed and used by a separate CMake consumer project.
+- The source manager owns source buffers and maps byte offsets through indexed line tables, including CR/LF/CRLF, UTF-8 scalar columns, and tabs.
 - `indicode typed-json` emits verified HIR as JSON with a schema version and stable local binding IDs; deserialization and a compatibility policy are still future work.
 - `indicode ast-json` serializes parsed declarations and syntax nodes with source spans; golden snapshots and a compatibility policy remain future work.
-- Updated weighted estimate: **95.00%** (see `PROGRESS.md`).
+- Updated weighted estimate: **95.20%, rounded to 95%** (see `PROGRESS.md`).
 
 This is an estimate, not a marketing score. It may go down if a review finds missing acceptance behavior. Passing tests prove only the tested cases, not completeness of the language.
 
@@ -49,7 +50,7 @@ This is an estimate, not a marketing score. It may go down if a review finds mis
 - Tensor function signatures support numeric element types and static or symbolic dimensions, such as `Tensor<Float, [Batch, 784]>`; incompatible shapes are rejected by exact type checking.
 - Integer ranges such as `0..10` are parsed and type-checked; `for item in 0..10` binds `item` to the bound integer type.
 - `else if` chains are parsed into nested conditionals, and each branch participates in non-`Void` return-path checks.
-- Fifteen CTest cases include AST and typed-HIR JSON validation, parser recovery/fix-its, HIR symbol/scope checks, an installed-package consumer, a deterministic malformed-input smoke test, tensor shapes, and record/conversion samples.
+- Sixteen CTest cases include source-manager line/column checks, AST and typed-HIR JSON validation, parser recovery/fix-its, HIR symbol/scope checks, an installed-package consumer, a deterministic malformed-input smoke test, tensor shapes, and record/conversion samples.
 
 ## Newly Supported Syntax
 
@@ -144,7 +145,7 @@ The current grammar does not yet provide a type annotation syntax for an empty l
 | Stage | Status | In plain language | Completion evidence |
 | --- | --- | --- | --- |
 | 1. Project foundation | Mostly done | Build the project without large external frameworks. | C++20/CMake build and CTest work without LLVM or network downloads. |
-| 2. Source and lexer | Started | Read characters and recognize names, numbers, strings, punctuation, and errors. | Unicode identifiers, numeric suffixes, raw/block comments, and full source display-column mapping. |
+| 2. Source and lexer | Started | Own source buffers, map locations, and recognize names, numbers, strings, punctuation, and errors. | Unicode identifiers, numeric suffixes, raw strings, trivia preservation, and full terminal display-width mapping. |
 | 3. Parser and AST | Started | Recognize the language's grammar and record its structure. | Ranges, complete newline rules, AST golden tests, full recovery. |
 | 4. Names and types | Started | Decide what names refer to and whether operations use compatible types. | Modules, imports, conversions, overflow, ownership/effects, tensor shapes, and negative diagnostics. |
 | 5. Typed HIR | **Core subset implemented** | Convert checked source into our own typed representation. | More language coverage, stable function/type IDs, deserialization/compatibility policy, and broader verifier invariants. |

@@ -37,30 +37,6 @@ std::string json_escape(std::string_view value) {
     return result;
 }
 
-struct SourceLine {
-    std::string_view text;
-    std::size_t offset = 0;
-    bool found = false;
-};
-
-SourceLine source_line(const SourceFile& source, std::size_t requested_line) {
-    std::size_t line = 1;
-    std::size_t start = 0;
-    while (line < requested_line) {
-        const auto newline = source.contents.find('\n', start);
-        if (newline == std::string::npos) {
-            return {};
-        }
-        start = newline + 1;
-        ++line;
-    }
-    auto end = source.contents.find_first_of("\r\n", start);
-    if (end == std::string::npos) {
-        end = source.contents.size();
-    }
-    return {std::string_view(source.contents).substr(start, end - start), start, true};
-}
-
 std::size_t utf8_scalar_length(std::string_view text, std::size_t offset) {
     if (offset >= text.size()) {
         return 1;
@@ -116,16 +92,15 @@ std::string expand_tabs(std::string_view text) {
 
 }
 
-std::string format_diagnostic_text(const SourceFile& source, const Diagnostic& diagnostic) {
+std::string format_diagnostic_text(const SourceManager& sources, SourceId source_id,
+                                   const Diagnostic& diagnostic) {
+    const auto& source = sources.get_source(source_id);
     std::ostringstream output;
     output << source.name << ':' << diagnostic.span.start.line << ':'
            << diagnostic.span.start.column << ": " << severity_name(diagnostic.severity)
            << '[' << diagnostic.code << "]: " << diagnostic.message;
 
-    const auto line = source_line(source, diagnostic.span.start.line);
-    if (!line.found) {
-        return output.str();
-    }
+    const auto line = sources.line(source_id, diagnostic.span.start.line);
     output << "\n  " << expand_tabs(line.text) << "\n  ";
     const auto start_offset = diagnostic.span.start.offset >= line.offset
         ? std::min(diagnostic.span.start.offset - line.offset, line.text.size())
@@ -147,6 +122,12 @@ std::string format_diagnostic_text(const SourceFile& source, const Diagnostic& d
         }
     }
     return output.str();
+}
+
+std::string format_diagnostic_text(const SourceFile& source, const Diagnostic& diagnostic) {
+    SourceManager sources;
+    const auto source_id = sources.add_source(source.name, source.contents);
+    return format_diagnostic_text(sources, source_id, diagnostic);
 }
 
 std::string format_diagnostics_json(const SourceFile& source,

@@ -67,6 +67,12 @@ int main() {
     const auto unicode_text = indicode::format_diagnostic_text(unicode_source, unicode_diagnostic);
     require(unicode_text.find("    π = value\n          ^^^^^") != std::string::npos,
             "diagnostic caret should align after tabs and multi-byte UTF-8 scalars");
+    indicode::SourceManager unicode_sources;
+    const auto unicode_source_id =
+        unicode_sources.add_source(unicode_source.name, unicode_source.contents);
+    require(indicode::format_diagnostic_text(unicode_sources, unicode_source_id,
+                                             unicode_diagnostic) == unicode_text,
+            "diagnostic rendering should use the source manager's indexed line and column mapping");
 
     std::cout << "Diagnostic tests passed\n";
 }

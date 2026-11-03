@@ -35,6 +35,8 @@ struct Diagnostic {
 };
 
 std::string format_diagnostic_text(const SourceFile& source, const Diagnostic& diagnostic);
+std::string format_diagnostic_text(const SourceManager& sources, SourceId source_id,
+                                   const Diagnostic& diagnostic);
 std::string format_diagnostics_json(const SourceFile& source,
                                     const std::vector<Diagnostic>& diagnostics);
 

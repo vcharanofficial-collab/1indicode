@@ -9,6 +9,7 @@ include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 
 add_library(indicode_frontend
+    src/source.cpp
     src/lexer.cpp
     src/parser.cpp
     src/sema.cpp
@@ -76,6 +77,10 @@ if(BUILD_TESTING)
     add_executable(indicode_diagnostic_tests tests/diagnostic_tests.cpp)
     target_link_libraries(indicode_diagnostic_tests PRIVATE indicode_frontend)
     add_test(NAME diagnostic_tests COMMAND indicode_diagnostic_tests)
+
+    add_executable(indicode_source_tests tests/source_tests.cpp)
+    target_link_libraries(indicode_source_tests PRIVATE indicode_frontend)
+    add_test(NAME source_tests COMMAND indicode_source_tests)
 
     add_executable(indicode_parser_robustness_tests tests/parser_robustness_tests.cpp)
     target_link_libraries(indicode_parser_robustness_tests PRIVATE indicode_frontend)

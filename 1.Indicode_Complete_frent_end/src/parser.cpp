@@ -129,6 +129,12 @@ void Parser::synchronize() {
 }
 
 void Parser::declaration() {
+    if (match_keyword("record")) {
+        if (!record_declaration()) {
+            synchronize();
+        }
+        return;
+    }
     if (match_keyword("function")) {
         if (!function_declaration()) {
             synchronize();
@@ -158,6 +164,49 @@ std::string Parser::parse_type() {
         type += '<' + argument_type + '>';
     }
     return type;
+}
+
+bool Parser::record_declaration() {
+    const auto& record_keyword = previous();
+    const auto* name = consume_identifier("expected record name");
+    if (name == nullptr || consume(TokenKind::LeftBrace, "expected '{' after record name") == nullptr) {
+        return false;
+    }
+
+    RecordDecl record;
+    record.name = name->lexeme;
+    record.span.start = record_keyword.span.start;
+    skip_separators();
+    while (!check(TokenKind::RightBrace) && !at_end()) {
+        const auto* field_name = consume_identifier("expected record field name");
+        if (field_name == nullptr || consume(TokenKind::Colon, "expected ':' after field name") == nullptr) {
+            return false;
+        }
+        const auto field_type = parse_type();
+        if (field_type.empty()) {
+            return false;
+        }
+        record.fields.push_back({field_name->lexeme, field_type,
+                                 {field_name->span.start, previous().span.end}});
+
+        bool separated = false;
+        while (match(TokenKind::Newline) || match(TokenKind::Semicolon)) {
+            separated = true;
+        }
+        if (match(TokenKind::Comma)) {
+            skip_separators();
+        } else if (!check(TokenKind::RightBrace) && !separated) {
+            error(peek(), "expected ',' or a newline between record fields");
+            return false;
+        }
+    }
+    const auto* closing = consume(TokenKind::RightBrace, "expected '}' after record fields");
+    if (closing == nullptr) {
+        return false;
+    }
+    record.span.end = closing->span.end;
+    result_.program.records.push_back(std::move(record));
+    return true;
 }
 
 bool Parser::function_declaration() {
@@ -523,6 +572,17 @@ std::unique_ptr<Expr> Parser::finish_postfix(std::unique_ptr<Expr> expression) {
             indexed->left = std::move(expression);
             indexed->right = std::move(index);
             expression = std::move(indexed);
+        } else if (match(TokenKind::Dot)) {
+            const auto* member_name = consume_identifier("expected member name after '.'");
+            if (member_name == nullptr) {
+                return nullptr;
+            }
+            auto member = std::make_unique<Expr>();
+            member->kind = ExprKind::Member;
+            member->value = member_name->lexeme;
+            member->span = {expression->span.start, member_name->span.end};
+            member->left = std::move(expression);
+            expression = std::move(member);
         } else {
             return expression;
         }

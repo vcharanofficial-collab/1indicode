@@ -10,15 +10,15 @@ LLVM is a large, separate compiler framework. This project does **not** download
 
 The PDF is a blueprint, not a list of features already completed. Its 777 concepts are a long-term catalogue, not 777 built-in types or a promise to implement every idea immediately.
 
-## Current Overall Progress: 69%
+## Current Overall Progress: 80%
 
-This percentage means estimated completion of the **front-end work needed before a future LLVM adapter**. It does not mean 69% of LLVM, machine-code generation, a GPU compiler, or the AI runtime is complete.
+This percentage means estimated completion of the **front-end work needed before a future LLVM adapter**. It does not mean 80% of LLVM, machine-code generation, a GPU compiler, or the AI runtime is complete.
 
 The estimate uses the weighted acceptance areas in `PROGRESS.md`:
 
-- Previous measured total: 67.0%.
-- Nested block comments and newline preservation add 1.5 points; lexer tests and beginner documentation add 0.5 points.
-- New total: 67.0% + 2.0% = **69.0%**.
+- Previous estimate: 69.0%.
+- Records, named record construction, member type checking, checked integer conversions, and HIR verification were added with tests and an end-to-end CLI example.
+- Updated weighted estimate: 80.05%, rounded to **80%** (see `PROGRESS.md`).
 
 This is an estimate, not a marketing score. It may go down if a review finds missing acceptance behavior. Passing tests prove only the tested cases, not completeness of the language.
 
@@ -33,13 +33,36 @@ This is an estimate, not a marketing score. It may go down if a review finds mis
 - Lists can be created, indexed, and iterated with `for`; text can also be iterated/indexed as `Char` values.
 - String contents are UTF-8 validated; supported escapes include Unicode scalar escapes such as `\u{e9}`. A single Unicode scalar infers `Char`, more infer `Text`.
 - `indicode check`, `tokens`, `ast`, `typed`, and opt-in `--json-diagnostics` work for the current subset.
-- Eight CTest cases cover lexer, parser, semantics, HIR, diagnostics, and CLI behavior.
 - Integer literals support `0b` binary, `0o` octal, `0x` hexadecimal, and `_` digit separators; malformed forms are rejected.
 - Function calls accept named arguments such as `add(b: 22, a: 20)` and reject unknown, duplicate, missing, or out-of-order arguments.
-- Block comments use `/* ... */`, may be nested, and keep newlines as statement separators.
 - Nested block comments use `/* ... */`; newlines inside them still separate statements. An unclosed comment is a compile-time error.
+- Records support typed fields, construction with named fields, and read-only member access with type checking.
+- Integer values can be explicitly converted with functions such as `to_Int2(value, checked: true)`. Integer constants outside the destination range are rejected; dynamic inputs require the checked mode.
+- Nine CTest cases cover the current front-end behavior, including the record sample.
 
 ## Newly Supported Syntax
+
+Records declare fields with explicit types. Construction uses named arguments and must provide every field exactly once.
+
+```indi
+record Point {
+    x: Int,
+    y: Int
+}
+
+origin = Point(x: 20, y: 22)
+say(origin.x)
+```
+
+Unknown/missing fields, duplicate field declarations, and mismatched field types are errors. Record methods, field assignment, and visibility rules are not implemented.
+
+Integer conversion is explicit and checked:
+
+```indi
+small = to_Int2(30000, checked: true)
+```
+
+The current conversion subset targets integer types only. Floating-point conversion rules and runtime execution of conversions are not implemented.
 
 Lists are written with square brackets. A non-empty list must contain values of one type. Its type is inferred from those values.
 
@@ -91,7 +114,7 @@ The current grammar does not yet provide a type annotation syntax for an empty l
 | --- | --- | --- | --- |
 | 1. Project foundation | Mostly done | Build the project without large external frameworks. | C++20/CMake build and CTest work without LLVM or network downloads. |
 | 2. Source and lexer | Started | Read characters and recognize names, numbers, strings, punctuation, and errors. | Unicode identifiers, numeric suffixes, raw/block comments, and full source display-column mapping. |
-| 3. Parser and AST | Started | Recognize the language's grammar and record its structure. | Member access, ranges, complete newline rules, AST golden tests, full recovery. |
+| 3. Parser and AST | Started | Recognize the language's grammar and record its structure. | Ranges, complete newline rules, AST golden tests, full recovery. |
 | 4. Names and types | Started | Decide what names refer to and whether operations use compatible types. | Modules, imports, conversions, overflow, ownership/effects, tensor shapes, and negative diagnostics. |
 | 5. Typed HIR | **Started; more core syntax implemented** | Convert checked source into our own typed representation. | More language coverage, stable IDs, effects/conversions, verifier invariants, serialization/versioning. |
 | 6. Diagnostics and tools | Started | Make errors useful to people and editors. | JSON schema stability, fix-its, editor interfaces, and complete recovery diagnostics. |
@@ -117,6 +140,7 @@ cmake --build /tmp/indicode-build
 ctest --test-dir /tmp/indicode-build --output-on-failure
 /tmp/indicode-build/indicode check examples/hello.indi
 /tmp/indicode-build/indicode typed examples/hello.indi
+/tmp/indicode-build/indicode check examples/records.indi
 ```
 
 A successful check means the source passed the current subset's front-end checks. It does not mean the program was executed or compiled to machine code.

@@ -63,6 +63,45 @@ bool is_integer_literal_expression(const Expr& expression) {
            expression.left->value.front() >= '0' && expression.left->value.front() <= '9';
 }
 
+std::string integer_conversion_target(const std::string& name) {
+    static const std::unordered_map<std::string, std::string> conversions{
+        {"to_Byte", "Byte"}, {"to_U8", "U8"}, {"to_Int2", "Int2"},
+        {"to_UInt2", "UInt2"}, {"to_Int", "Int"}, {"to_UInt", "UInt"},
+        {"to_Long", "Long"}, {"to_ULong", "ULong"}
+    };
+    const auto conversion = conversions.find(name);
+    return conversion == conversions.end() ? std::string{} : conversion->second;
+}
+
+bool integer_literal_fits(const Expr& expression, const std::string& type) {
+    const bool negative = expression.kind == ExprKind::Unary;
+    const Expr& literal = negative ? *expression.left : expression;
+    std::uint64_t magnitude = 0;
+    if (!parse_integer_magnitude(literal.value, magnitude)) {
+        return false;
+    }
+
+    bool is_signed = false;
+    std::uint64_t positive_limit = 0;
+    std::uint64_t negative_limit = 0;
+    if (type == "Byte" || type == "U8") positive_limit = 255;
+    else if (type == "Int2") { is_signed = true; positive_limit = 32767; negative_limit = 32768; }
+    else if (type == "UInt2") positive_limit = 65535;
+    else if (type == "Int") { is_signed = true; positive_limit = 2147483647; negative_limit = 2147483648ULL; }
+    else if (type == "UInt") positive_limit = 4294967295ULL;
+    else if (type == "Long") {
+        is_signed = true;
+        positive_limit = static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
+        negative_limit = positive_limit + 1;
+    } else if (type == "ULong") {
+        positive_limit = std::numeric_limits<std::uint64_t>::max();
+    } else {
+        return false;
+    }
+
+    return negative ? is_signed && magnitude <= negative_limit : magnitude <= positive_limit;
+}
+
 std::string literal_string_type(const std::string& spelling) {
     if (spelling.size() < 2) return "Text";
     std::size_t scalar_count = 0;
@@ -90,11 +129,37 @@ std::string literal_string_type(const std::string& spelling) {
 SemanticResult Analyzer::analyze(Program& program) {
     diagnostics_.clear();
     functions_.clear();
+    records_.clear();
     scopes_.clear();
     push_scope();
 
+    for (const auto& record : program.records) {
+        if (is_known_type(record.name) || !records_.emplace(record.name,
+                std::unordered_map<std::string, std::string>{}).second) {
+            add_error("E-SEMA-032", "record name is already declared", record.span);
+        }
+    }
+    for (const auto& record : program.records) {
+        auto found_record = records_.find(record.name);
+        if (found_record == records_.end()) {
+            continue;
+        }
+        for (const auto& field : record.fields) {
+            if (found_record->second.contains(field.name)) {
+                add_error("E-SEMA-033", "record field is already declared", field.span);
+                continue;
+            }
+            if (!is_known_type(field.type) || field.type == "Void") {
+                add_error("E-SEMA-034", "record field has an unknown or invalid type", field.span);
+                continue;
+            }
+            found_record->second.emplace(field.name, field.type);
+        }
+    }
+
     for (const auto& function : program.functions) {
-        if (function.name == "say" || functions_.contains(function.name)) {
+        if (function.name == "say" || !integer_conversion_target(function.name).empty() ||
+            functions_.contains(function.name)) {
             add_error("E-SEMA-001", "function name is already declared", function.span);
             continue;
         }
@@ -142,7 +207,7 @@ bool Analyzer::is_known_type(const std::string& type) const {
     if (const auto element_type = list_element_type(type); !element_type.empty()) {
         return is_known_type(element_type) && element_type != "Void";
     }
-    return type == "Bool" || type == "Byte" || type == "U8" || type == "Int2" ||
+    return records_.contains(type) || type == "Bool" || type == "Byte" || type == "U8" || type == "Int2" ||
            type == "UInt2" || type == "Int" || type == "UInt" || type == "Long" ||
            type == "ULong" || type == "Half" || type == "Float" || type == "Double" ||
            type == "Char" || type == "Text" || type == "Void";
@@ -386,7 +451,80 @@ std::string Analyzer::analyze_expression(Expr& expression) {
         } else {
             const auto function = functions_.find(expression.value);
             if (function == functions_.end()) {
-                add_error("E-SEMA-018", "unknown function", expression.span);
+                const auto conversion_type = integer_conversion_target(expression.value);
+                if (!conversion_type.empty()) {
+                    const bool valid_shape = argument_types.size() == 2 &&
+                        expression.argument_names.size() == 2 &&
+                        expression.argument_names[0].empty() &&
+                        expression.argument_names[1] == "checked" &&
+                        expression.arguments[1]->kind == ExprKind::Literal &&
+                        expression.arguments[1]->value == "true";
+                    const bool valid_source = !argument_types.empty() &&
+                                              is_numeric_type(argument_types[0]);
+                    if (!valid_shape || !valid_source) {
+                        add_error("E-SEMA-044",
+                                  "integer conversion expects a numeric value and checked: true",
+                                  expression.span);
+                    } else if (is_integer_literal_expression(*expression.arguments[0]) &&
+                               !integer_literal_fits(*expression.arguments[0], conversion_type)) {
+                        add_error("E-SEMA-022",
+                                  "integer literal is outside the conversion target range",
+                                  expression.arguments[0]->span);
+                    } else {
+                        type = conversion_type;
+                        expression.resolved_symbol = expression.value;
+                    }
+                } else if (const auto record = records_.find(expression.value);
+                           record == records_.end()) {
+                    add_error("E-SEMA-018", "unknown function", expression.span);
+                } else {
+                    std::vector<bool> assigned(record->second.size(), false);
+                    bool fields_match = argument_types.size() == record->second.size();
+                    for (std::size_t index = 0; index < argument_types.size(); ++index) {
+                        const std::string field_name = index < expression.argument_names.size()
+                            ? expression.argument_names[index] : "";
+                        if (field_name.empty()) {
+                            add_error("E-SEMA-037", "record construction requires named fields",
+                                      expression.arguments[index]->span);
+                            fields_match = false;
+                            continue;
+                        }
+                        std::size_t field_index = 0;
+                        auto field = record->second.begin();
+                        while (field != record->second.end() && field->first != field_name) {
+                            ++field;
+                            ++field_index;
+                        }
+                        if (field == record->second.end()) {
+                            add_error("E-SEMA-038", "unknown record field", expression.arguments[index]->span);
+                            fields_match = false;
+                            continue;
+                        }
+                        if (assigned[field_index]) {
+                            add_error("E-SEMA-039", "record field was supplied more than once",
+                                      expression.arguments[index]->span);
+                            fields_match = false;
+                            continue;
+                        }
+                        assigned[field_index] = true;
+                        if (argument_types[index] != error_type && argument_types[index] != field->second) {
+                            fields_match = false;
+                        }
+                    }
+                    for (const bool field_assigned : assigned) {
+                        if (!field_assigned) {
+                            add_error("E-SEMA-040", "missing required record field", expression.span);
+                            fields_match = false;
+                        }
+                    }
+                    if (fields_match) {
+                        type = expression.value;
+                        expression.resolved_symbol = expression.value;
+                    } else {
+                        add_error("E-SEMA-041", "record field value does not match its declared type",
+                                  expression.span);
+                    }
+                }
             } else if (function->second.parameter_types.size() != argument_types.size()) {
                 add_error("E-SEMA-019", "function argument count does not match signature", expression.span);
             } else {
@@ -481,6 +619,24 @@ std::string Analyzer::analyze_expression(Expr& expression) {
         }
         break;
     }
+    case ExprKind::Member: {
+        const auto base_type = analyze_expression(*expression.left);
+        const auto record = records_.find(base_type);
+        if (record == records_.end()) {
+            if (base_type != error_type) {
+                add_error("E-SEMA-042", "member access requires a record value", expression.left->span);
+            }
+        } else {
+            const auto field = record->second.find(expression.value);
+            if (field == record->second.end()) {
+                add_error("E-SEMA-043", "record has no field with this name", expression.span);
+            } else {
+                type = field->second;
+                expression.resolved_symbol = base_type + "." + expression.value;
+            }
+        }
+        break;
+    }
     }
     expression.inferred_type = type;
     return type;
@@ -489,36 +645,12 @@ std::string Analyzer::analyze_expression(Expr& expression) {
 bool Analyzer::type_integer_literal(Expr& expression, const std::string& type) {
     const bool negative = expression.kind == ExprKind::Unary;
     Expr& literal = negative ? *expression.left : expression;
-    std::uint64_t magnitude = 0;
-    if (!parse_integer_magnitude(literal.value, magnitude)) {
+    if (!integer_literal_fits(expression, type)) {
         return false;
     }
-
-    bool is_signed = false;
-    std::uint64_t positive_limit = 0;
-    std::uint64_t negative_limit = 0;
-    if (type == "Byte" || type == "U8") positive_limit = 255;
-    else if (type == "Int2") { is_signed = true; positive_limit = 32767; negative_limit = 32768; }
-    else if (type == "UInt2") positive_limit = 65535;
-    else if (type == "Int") { is_signed = true; positive_limit = 2147483647; negative_limit = 2147483648ULL; }
-    else if (type == "UInt") positive_limit = 4294967295ULL;
-    else if (type == "Long") {
-        is_signed = true;
-        positive_limit = static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
-        negative_limit = positive_limit + 1;
-    } else if (type == "ULong") {
-        positive_limit = std::numeric_limits<std::uint64_t>::max();
-    } else {
-        return false;
-    }
-
-    const bool in_range = negative ? is_signed && magnitude <= negative_limit
-                                   : magnitude <= positive_limit;
-    if (in_range) {
-        literal.inferred_type = type;
-        expression.inferred_type = type;
-    }
-    return in_range;
+    literal.inferred_type = type;
+    expression.inferred_type = type;
+    return true;
 }
 
 std::string Analyzer::numeric_binary_type(Expr& expression, const std::string& left,

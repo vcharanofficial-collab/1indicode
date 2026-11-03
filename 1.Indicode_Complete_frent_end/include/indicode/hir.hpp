@@ -16,7 +16,8 @@ enum class HirExprKind {
     Binary,
     Call,
     ListLiteral,
-    Index
+    Index,
+    Member
 };
 
 struct HirExpr {
@@ -67,7 +68,14 @@ struct HirFunction {
     std::vector<std::unique_ptr<HirStmt>> body;
 };
 
+struct HirRecord {
+    std::string name;
+    std::vector<RecordField> fields;
+    SourceSpan span;
+};
+
 struct HirProgram {
+    std::vector<HirRecord> records;
     std::vector<HirFunction> functions;
     std::vector<std::unique_ptr<HirStmt>> statements;
 };

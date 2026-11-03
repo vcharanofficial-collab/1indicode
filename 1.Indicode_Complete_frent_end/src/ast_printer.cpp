@@ -58,6 +58,10 @@ void print_expression(std::ostringstream& output, const Expr& expression, bool i
         print_expression(output, *expression.right, include_types);
         output << ')';
         break;
+    case ExprKind::Member:
+        print_expression(output, *expression.left, include_types);
+        output << '.' << expression.value;
+        break;
     }
     if (include_types && !expression.inferred_type.empty()) {
         output << ':' << expression.inferred_type;
@@ -137,6 +141,13 @@ void print_statements(std::ostringstream& output,
 
 std::string print_program(const Program& program, bool include_types) {
     std::ostringstream output;
+    for (const auto& record : program.records) {
+        output << "record " << record.name << " {\n";
+        for (const auto& field : record.fields) {
+            output << "  " << field.name << ": " << field.type << '\n';
+        }
+        output << "}\n";
+    }
     for (const auto& function : program.functions) {
         output << "function " << function.name << '(';
         for (std::size_t index = 0; index < function.parameters.size(); ++index) {

@@ -55,7 +55,7 @@ std::size_t utf8_sequence_length(const std::string& text, std::size_t offset) {
 
 bool is_keyword(const std::string& value) {
     static constexpr std::array keywords{
-        "function", "return", "if", "else", "repeat", "times", "for", "in",
+        "function", "record", "return", "if", "else", "repeat", "times", "for", "in",
         "while", "let", "var", "true", "false"
     };
     for (const auto* keyword : keywords) {

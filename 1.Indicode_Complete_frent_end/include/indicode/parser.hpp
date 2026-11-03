@@ -41,6 +41,7 @@ private:
     void synchronize();
     void declaration();
     std::string parse_type();
+    bool record_declaration();
     bool function_declaration();
     std::unique_ptr<Stmt> statement();
     std::unique_ptr<Stmt> variable_statement(bool mutable_binding, std::string declared_type = {});
@@ -56,6 +57,7 @@ private:
     std::unique_ptr<Expr> primary();
     std::unique_ptr<Expr> finish_postfix(std::unique_ptr<Expr> expression);
     std::unique_ptr<Expr> finish_call(std::unique_ptr<Expr> callee);
+    std::unique_ptr<Expr> finish_record_literal(std::unique_ptr<Expr> type_name);
     static int precedence(TokenKind kind);
 };
 

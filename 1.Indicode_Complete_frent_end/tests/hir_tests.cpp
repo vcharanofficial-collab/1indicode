@@ -51,5 +51,27 @@ int main() {
     require(!invalid.empty() && invalid[0].code == "E-HIR-004",
             "verifier should reject expressions without a valid type annotation");
 
+    const indicode::SourceFile records_source{
+        "records.indi",
+        "record Point { x: Int, y: Int }\n"
+        "origin = Point(x: 20, y: 22)\n"
+        "answer = origin.x\n"
+        "small = to_Int2(20, checked: true)\n"
+    };
+    const auto records_lexed = indicode::Lexer(records_source).lex();
+    auto records_parsed = indicode::Parser(records_lexed.tokens).parse();
+    require(records_lexed.diagnostics.empty() && records_parsed.diagnostics.empty(),
+            "record HIR fixture should lex and parse");
+    require(indicode::Analyzer().analyze(records_parsed.program).diagnostics.empty(),
+            "record HIR fixture should pass semantic checks");
+    const auto records_hir = indicode::lower_to_hir(records_parsed.program);
+    require(records_hir.records.size() == 1 && indicode::verify_hir(records_hir).empty(),
+            "typed HIR should preserve and verify record declarations and access");
+    const auto records_printed = indicode::print_hir(records_hir);
+    require(records_printed.find("record @Point") != std::string::npos &&
+                records_printed.find(".x : Int") != std::string::npos &&
+                records_printed.find("call @to_Int2") != std::string::npos,
+            "typed HIR printer should show records, member access, and checked conversions");
+
     std::cout << "HIR tests passed\n";
 }

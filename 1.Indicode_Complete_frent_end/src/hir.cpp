@@ -67,18 +67,28 @@ bool is_numeric_type(const std::string& type) {
     return is_integer_type(type) || type == "Half" || type == "Float" || type == "Double";
 }
 
-bool is_known_type(const std::string& type) {
+std::string integer_conversion_target(const std::string& name) {
+    static const std::unordered_map<std::string, std::string> conversions{
+        {"to_Byte", "Byte"}, {"to_U8", "U8"}, {"to_Int2", "Int2"},
+        {"to_UInt2", "UInt2"}, {"to_Int", "Int"}, {"to_UInt", "UInt"},
+        {"to_Long", "Long"}, {"to_ULong", "ULong"}
+    };
+    const auto conversion = conversions.find(name);
+    return conversion == conversions.end() ? std::string{} : conversion->second;
+}
+
+bool is_known_type(const std::string& type, const std::unordered_set<std::string>& record_names) {
     constexpr std::string_view list_prefix = "List<";
     if (type.compare(0, list_prefix.size(), list_prefix) == 0 &&
         type.size() > list_prefix.size() && type.back() == '>') {
         const auto element_type = type.substr(list_prefix.size(), type.size() - list_prefix.size() - 1);
-        return is_known_type(element_type) && element_type != "Void";
+        return is_known_type(element_type, record_names) && element_type != "Void";
     }
     static const std::unordered_set<std::string> types{
         "Bool", "Byte", "U8", "Int2", "UInt2", "Int", "UInt", "Long", "ULong",
         "Half", "Float", "Double", "Char", "Text", "Void"
     };
-    return types.find(type) != types.end();
+    return types.find(type) != types.end() || record_names.contains(type);
 }
 
 std::string list_element_type(const std::string& type) {
@@ -94,6 +104,9 @@ std::string list_element_type(const std::string& type) {
 
 HirProgram lower_to_hir(const Program& program) {
     HirProgram result;
+    for (const auto& record : program.records) {
+        result.records.push_back({record.name, record.fields, record.span});
+    }
     for (const auto& function : program.functions) {
         HirFunction lowered;
         lowered.name = function.name;
@@ -111,18 +124,41 @@ HirProgram lower_to_hir(const Program& program) {
 
 std::vector<Diagnostic> verify_hir(const HirProgram& program) {
     std::vector<Diagnostic> diagnostics;
+    std::unordered_map<std::string, const HirRecord*> records;
+    std::unordered_set<std::string> record_names;
+    for (const auto& record : program.records) {
+        if (!records.emplace(record.name, &record).second) {
+            diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-023",
+                                   "duplicate record in typed HIR", record.span});
+            continue;
+        }
+        record_names.insert(record.name);
+    }
+    for (const auto& record : program.records) {
+        std::unordered_set<std::string> field_names;
+        for (const auto& field : record.fields) {
+            if (!field_names.insert(field.name).second) {
+                diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-024",
+                                       "duplicate field in typed HIR record", field.span});
+            }
+            if (!is_known_type(field.type, record_names) || field.type == "Void") {
+                diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-025",
+                                       "record field has an invalid type", field.span});
+            }
+        }
+    }
     std::unordered_map<std::string, const HirFunction*> functions;
     for (const auto& function : program.functions) {
         if (!functions.emplace(function.name, &function).second) {
             diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-001",
                                    "duplicate function in typed HIR", function.span});
         }
-        if (!is_known_type(function.return_type)) {
+        if (!is_known_type(function.return_type, record_names)) {
             diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-002",
                                    "function has an unknown return type", function.span});
         }
         for (const auto& parameter : function.parameters) {
-            if (!is_known_type(parameter.type) || parameter.type == "Void") {
+            if (!is_known_type(parameter.type, record_names) || parameter.type == "Void") {
                 diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-003",
                                        "parameter has an invalid type", parameter.span});
             }
@@ -131,7 +167,7 @@ std::vector<Diagnostic> verify_hir(const HirProgram& program) {
 
     std::function<std::string(const HirExpr&)> verify_expression;
     verify_expression = [&](const HirExpr& expression) -> std::string {
-        if (!is_known_type(expression.type)) {
+        if (!is_known_type(expression.type, record_names)) {
             diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-004",
                                    "expression is missing a valid type annotation", expression.span});
             return "<error>";
@@ -169,6 +205,24 @@ std::vector<Diagnostic> verify_hir(const HirProgram& program) {
             if (!valid && operand_type != "<error>") {
                 diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-008",
                                        "unary operation has inconsistent operand/result types", expression.span});
+            }
+            break;
+        }
+        case HirExprKind::Member: {
+            const auto base_type = child_type(expression.left);
+            const auto record = records.find(base_type);
+            bool matches = false;
+            if (record != records.end()) {
+                for (const auto& field : record->second->fields) {
+                    if (field.name == expression.value && field.type == expression.type) {
+                        matches = true;
+                        break;
+                    }
+                }
+            }
+            if (!matches) {
+                diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-027",
+                                       "member access does not match a declared record field", expression.span});
             }
             break;
         }
@@ -217,8 +271,58 @@ std::vector<Diagnostic> verify_hir(const HirProgram& program) {
             }
             const auto target = functions.find(expression.symbol);
             if (target == functions.end()) {
-                diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-011",
-                                       "call target is not present in the typed HIR", expression.span});
+                const auto conversion_type = integer_conversion_target(expression.symbol);
+                if (!conversion_type.empty()) {
+                    const bool valid = argument_types.size() == 2 &&
+                        expression.argument_names.size() == 2 &&
+                        expression.argument_names[0].empty() &&
+                        expression.argument_names[1] == "checked" &&
+                        argument_types[0] != "Void" && is_numeric_type(argument_types[0]) &&
+                        expression.arguments[1]->kind == HirExprKind::Literal &&
+                        expression.arguments[1]->value == "true" &&
+                        argument_types[1] == "Bool" && expression.type == conversion_type;
+                    if (!valid) {
+                        diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-028",
+                                               "checked integer conversion has an invalid signature",
+                                               expression.span});
+                    }
+                    break;
+                }
+                const auto record = records.find(expression.symbol);
+                if (record == records.end()) {
+                    diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-011",
+                                           "call target is not present in the typed HIR", expression.span});
+                    break;
+                }
+                const auto& fields = record->second->fields;
+                bool matches = expression.type == expression.symbol &&
+                               fields.size() == argument_types.size() &&
+                               expression.argument_names.size() == argument_types.size();
+                std::vector<bool> assigned(fields.size(), false);
+                for (std::size_t index = 0; index < argument_types.size(); ++index) {
+                    const auto field_name = index < expression.argument_names.size()
+                        ? expression.argument_names[index] : "";
+                    std::size_t field_index = fields.size();
+                    for (std::size_t candidate = 0; candidate < fields.size(); ++candidate) {
+                        if (fields[candidate].name == field_name) {
+                            field_index = candidate;
+                            break;
+                        }
+                    }
+                    if (field_index == fields.size() || assigned[field_index] ||
+                        argument_types[index] != fields[field_index].type) {
+                        matches = false;
+                    } else {
+                        assigned[field_index] = true;
+                    }
+                }
+                for (const bool field_assigned : assigned) {
+                    matches = matches && field_assigned;
+                }
+                if (!matches) {
+                    diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-026",
+                                           "record construction does not match its field types", expression.span});
+                }
                 break;
             }
             const auto& parameters = target->second->parameters;
@@ -310,13 +414,14 @@ std::vector<Diagnostic> verify_hir(const HirProgram& program) {
 
             switch (statement->kind) {
             case HirStmtKind::Variable:
-                if (!is_known_type(statement->type) || value_type != statement->type) {
+                if (!is_known_type(statement->type, record_names) || value_type != statement->type) {
                     diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-014",
                                            "variable initializer does not match its declared HIR type", statement->span});
                 }
                 break;
             case HirStmtKind::Assignment:
-                if (statement->name.empty() || !is_known_type(statement->type) || value_type != statement->type) {
+                if (statement->name.empty() || !is_known_type(statement->type, record_names) ||
+                    value_type != statement->type) {
                     diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-015",
                                            "assignment does not match its resolved HIR binding type", statement->span});
                 }
@@ -413,6 +518,10 @@ std::string print_hir(const HirProgram& program) {
             print_expression(*expression.right);
             output << "] : " << expression.type;
             break;
+        case HirExprKind::Member:
+            print_expression(*expression.left);
+            output << '.' << expression.value << " : " << expression.type;
+            break;
         }
     };
 
@@ -471,6 +580,13 @@ std::string print_hir(const HirProgram& program) {
         }
     };
 
+    for (const auto& record : program.records) {
+        output << "record @" << record.name << " {\n";
+        for (const auto& field : record.fields) {
+            output << "  " << field.name << ": " << field.type << '\n';
+        }
+        output << "}\n";
+    }
     for (const auto& function : program.functions) {
         output << "func @" << function.name << '(';
         for (std::size_t index = 0; index < function.parameters.size(); ++index) {

@@ -1,0 +1,13 @@
+record Point {
+    x: Int,
+    y: Int
+}
+
+function horizontal(point: Point) -> Int {
+    return point.x
+}
+
+origin = Point(x: 20, y: 22)
+answer = horizontal(origin)
+smallAnswer = to_Int2(answer, checked: true)
+say(smallAnswer)

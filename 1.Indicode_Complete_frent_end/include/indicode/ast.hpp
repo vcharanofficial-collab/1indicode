@@ -15,7 +15,8 @@ enum class ExprKind {
     Binary,
     Call,
     ListLiteral,
-    Index
+    Index,
+    Member
 };
 
 struct Expr {
@@ -66,7 +67,20 @@ struct FunctionDecl {
     std::vector<std::unique_ptr<Stmt>> body;
 };
 
+struct RecordField {
+    std::string name;
+    std::string type;
+    SourceSpan span;
+};
+
+struct RecordDecl {
+    std::string name;
+    std::vector<RecordField> fields;
+    SourceSpan span;
+};
+
 struct Program {
+    std::vector<RecordDecl> records;
     std::vector<FunctionDecl> functions;
     std::vector<std::unique_ptr<Stmt>> statements;
 };

@@ -42,6 +42,7 @@ if(BUILD_TESTING)
     add_test(NAME diagnostic_tests COMMAND indicode_diagnostic_tests)
 
     add_test(NAME cli_check COMMAND indicode check ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/hello.indi)
+    add_test(NAME cli_record_check COMMAND indicode check ${CMAKE_CURRENT_SOURCE_DIR}/examples/records.indi)
     add_test(NAME cli_rejects_type_error COMMAND indicode check ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/type_error.indi)
     set_tests_properties(cli_rejects_type_error PROPERTIES WILL_FAIL TRUE)
     add_test(NAME cli_json_diagnostics

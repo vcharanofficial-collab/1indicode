@@ -45,6 +45,7 @@ int main() {
         "escaped = \"\\u{1F600}\"\n"
         "combined = \"e\\u{301}\"\n"
         "namedAnswer = add(b: fixed, a: 4)\n"
+        "small = to_Int2(30000, checked: true)\n"
         "say(\"ok\")\n"
     };
     auto valid_program = parse_source(valid);
@@ -100,6 +101,54 @@ int main() {
     }
     require(saw_unknown_named && saw_duplicate_named,
             "unknown and duplicate named arguments should be rejected");
+    require(valid_program.statements[17]->declared_type == "Int2",
+            "checked integer conversions should infer their destination type");
+
+    const indicode::SourceFile records_source{
+        "records.indi",
+        "record Point { x: Int, y: Int }\n"
+        "function horizontal(point: Point) -> Int { return point.x }\n"
+        "origin = Point(x: 0, y: 0)\n"
+        "coordinate = horizontal(origin)\n"
+    };
+    auto records_program = parse_source(records_source);
+    const auto records_result = indicode::Analyzer().analyze(records_program);
+    require(records_result.diagnostics.empty(),
+            "record fields, named construction, and member types should pass semantic checks");
+    require(records_program.statements[0]->declared_type == "Point" &&
+                records_program.statements[1]->declared_type == "Int",
+            "record values and field accesses should retain their resolved types");
+
+    const indicode::SourceFile invalid_records_source{
+        "invalid_records.indi",
+        "record Point { x: Int }\n"
+        "point = Point(x: 1)\n"
+        "missing = point.z\n"
+        "bad = Point(x: \"bad\")\n"
+        "one = 1\n"
+        "not_a_record = one.x\n"
+        "incomplete = Point()\n"
+        "unchecked = to_Int2(1)\n"
+        "overflow = to_Int2(40000, checked: true)\n"
+        "wrong_source = to_Int2(\"bad\", checked: true)\n"
+    };
+    auto invalid_records_program = parse_source(invalid_records_source);
+    const auto invalid_records_result = indicode::Analyzer().analyze(invalid_records_program);
+    bool saw_field_type_error = false;
+    bool saw_missing_field = false;
+    bool saw_non_record_access = false;
+    bool saw_invalid_conversion = false;
+    bool saw_conversion_range_error = false;
+    for (const auto& diagnostic : invalid_records_result.diagnostics) {
+        saw_field_type_error = saw_field_type_error || diagnostic.code == "E-SEMA-041";
+        saw_missing_field = saw_missing_field || diagnostic.code == "E-SEMA-043";
+        saw_non_record_access = saw_non_record_access || diagnostic.code == "E-SEMA-042";
+        saw_invalid_conversion = saw_invalid_conversion || diagnostic.code == "E-SEMA-044";
+        saw_conversion_range_error = saw_conversion_range_error || diagnostic.code == "E-SEMA-022";
+    }
+    require(saw_field_type_error && saw_missing_field && saw_non_record_access &&
+                saw_invalid_conversion && saw_conversion_range_error,
+            "invalid records, member accesses, and integer conversions should be diagnosed");
 
     std::cout << "Semantic tests passed\n";
 }

@@ -8,21 +8,23 @@ This phase builds only the Indicode front end, targeting a validated typed repre
 
 ## Completion
 
-**Overall front-end completion: 69%**
+**Overall front-end completion: 80%**
 
-The percentage measures progress toward the complete front-end boundary described in the blueprint, not progress toward LLVM itself or the full AI compiler. It is a weighted estimate: each area's weight is fixed, and completion credit requires implemented, tested, documented acceptance behavior. The previous measured total was 67.0%. Nested block comments with newline preservation add 1.5 weighted points to lexer coverage; regression cases and beginner documentation add 0.5 points. New total: 67.0% + 2.0% = **69.0%**.
+The percentage measures progress toward the complete front-end boundary described in the blueprint, not progress toward LLVM itself or the full AI compiler. It is a weighted estimate: each area's weight is fixed, and completion credit requires implemented, tested, documented acceptance behavior. The preceding estimate was 69.0%. Record declarations/construction/member typing, checked integer conversions, and their HIR validation were added and tested; the revised weighted total is **80.05%, rounded to 80%**.
 
 | Acceptance area | Weight | Area completion | Evidence / remaining work |
 | --- | --- | --- |
 | Project/build foundation | 5% | 80% | C++20, CMake, and CTest work; install/package/CI acceptance remains. |
 | Source manager and diagnostics | 10% | 55% | Source spans, source-line/caret rendering, JSON escaping and structured spans; owned source manager, display-width mapping, fix-its and richer JSON schema remain. |
-| Lexer | 15% | 88% | ASCII identifiers, UTF-8 strings, escapes, binary/octal/hex integers, digit separators, and nested block comments with newline preservation; Unicode identifiers, suffix policy, trivia preservation, and complete numeric grammar remain. |
-| Parser and AST | 15% | 63% | Functions, blocks, calls, precedence, typed lists, indexing, for-each and named arguments; member access, ranges, full recovery and AST snapshots remain. |
-| Name resolution | 10% | 45% | Lexical scopes, function/variable/parameter lookup and scoped for-each bindings; modules/imports, robust symbol identities and global declaration phases remain. |
-| Type checking and semantic validation | 15% | 55% | Scalar/radix integer inference, literal range checks, named parameter binding, homogeneous lists, indexing, loops, mutability and signatures; conversions, ownership/effects and tensor shapes remain. |
-| Typed HIR and verification | 15% | 84% | Project-owned typed HIR covers collections, loops, and named-call labels; verifier checks collection/index/loop/call contracts. Stable IDs, full semantics, serialization/versioning and broader invariant coverage remain. |
+| Lexer | 15% | 89% | ASCII identifiers, UTF-8 strings, escapes, binary/octal/hex integers, digit separators, and nested block comments with newline preservation; Unicode identifiers, suffix policy, trivia preservation, and complete numeric grammar remain. |
+| Parser and AST | 15% | 76% | Functions, blocks, calls, precedence, typed lists, indexing, for-each, named arguments, record declarations, and member access; ranges, full recovery and AST snapshots remain. |
+| Name resolution | 10% | 70% | Lexical scopes, function/variable/parameter lookup, record type names and field lookup, and scoped for-each bindings; modules/imports and stable symbol identities remain. |
+| Type checking and semantic validation | 15% | 82% | Scalar/radix integer inference, literal range checks, checked integer conversions, named parameter binding, homogeneous lists, record construction/field types, indexing, loops and mutability; floating conversions, ownership/effects and tensor shapes remain. |
+| Typed HIR and verification | 15% | 94% | Project-owned typed HIR covers records, member access, checked integer conversions, collections and loops; verifier checks record/conversion/collection/index/loop/call contracts. Stable IDs, serialization/versioning and broader invariants remain. |
 | CLI and diagnostics tooling | 5% | 80% | `check`, `tokens`, `ast`, `typed`, source excerpts/carets and opt-in JSON diagnostics; editor interfaces, fix-its and diagnostics schema stability remain. |
-| Tests, docs, and integration | 10% | 75% | Eight CTest cases, radix/named-argument/comment/Unicode/collection fixtures, rules, beginner roadmap and updated example; conformance, fuzz/property tests, sanitizers and CI remain. |
+| Tests, docs, and integration | 10% | 84% | Nine CTest cases, including end-to-end record and checked-conversion checks, plus radix/named-argument/comment/Unicode/collection coverage; conformance, fuzz/property tests, sanitizers and CI remain. |
+
+Updated weighted estimate: 4.0 + 5.5 + 13.35 + 11.4 + 7.0 + 12.3 + 14.1 + 4.0 + 8.4 = **80.05%, rounded to 80%**. This remains an estimate for the front-end boundary, not a claim that every PDF feature is implemented.
 
 ## Work completed
 
@@ -51,15 +53,15 @@ The percentage measures progress toward the complete front-end boundary describe
 - Added binary/octal/hexadecimal integer literals and underscore separators with malformed-digit/separator diagnostics and destination range checks.
 - Added named function arguments end-to-end, including parameter-name resolution, duplicate/unknown/missing argument errors, and HIR preservation.
 - Added nested block comments, preserved their newline separators, and diagnosed unterminated comments.
-- The last verified CLI executable measured 636,856 bytes before its temporary build was cleaned; this is not a size guarantee for future builds or a runtime-memory limit.
+- Added record declarations, named record construction, and typed member access through parsing, semantic analysis, HIR lowering/verification, printers, and CLI coverage.
+- Added checked integer conversion calls to all supported integer destination types; conversion requires a numeric input and `checked: true`, and integer constants are range-checked before lowering.
 
 ## Current limitations
 
 - Identifiers are ASCII-only. UTF-8 is validated in string contents, but Unicode identifier rules and full Unicode display-column mapping are not implemented.
 - Numeric suffixes, raw strings, and the complete string escape repertoire remain incomplete.
-- Semantic checking is a core subset; numeric widening/conversions, full return-flow analysis, overloads, generics, module resolution, and complete diagnostics rendering remain.
-- Parser coverage is still a subset: member access, ranges, complete newline rules, AST printer snapshot tests, and full grammar recovery remain.
-- Numeric conversion is exact-type-only outside contextual integer literals; floating-point range/precision checks and the complete conversion policy remain.
+- Semantic checking is a core subset; only checked conversions to integer destinations are implemented. Numeric widening, floating conversions, full return-flow analysis, overloads, generics, module resolution, and complete diagnostics rendering remain.
+- Parser coverage is still a subset: ranges, complete newline rules, AST printer snapshot tests, and full grammar recovery remain.
 - Typed HIR/verifier currently cover the existing language subset only; they need complete semantic coverage, stable symbol identities, stronger validation, serialization/versioning, and conformance tests before an LLVM adapter is ready.
 
 ## Milestones
@@ -76,5 +78,5 @@ LLVM/backend work begins only after these front-end milestones are complete and 
 ## Latest verification
 
 - A fresh out-of-tree CMake configure/build succeeded with GCC 13.3.
-- All 8 CTest cases passed: lexer, parser, semantic analysis, HIR lowering/verifier, diagnostic formatting, valid CLI check, expected rejection of a type error, and JSON diagnostic CLI validation; the documented example passes `indicode check` and `typed`.
-- The temporary verification build and the project's generated `build/` directory were removed after validation. No compiled artifacts remain in the project folder.
+- All 9 CTest cases passed, including lexer, parser, semantic analysis, HIR lowering/verifier, diagnostic formatting, valid CLI checks for the standard and record examples, expected rejection of a type error, and JSON diagnostic CLI validation.
+- The verification build was kept outside the project at `/tmp/indicode-progress-build`; no generated build files were added to the repository.

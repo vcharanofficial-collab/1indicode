@@ -84,5 +84,20 @@ int main() {
     require(empty_result.diagnostics.empty() && empty_result.program.statements.empty(),
             "empty token input should produce an empty program without crashing");
 
+    const indicode::SourceFile records_source{
+        "records.indi",
+        "record Point { x: Int, y: Int }\n"
+        "origin = Point(x: 0, y: 0)\n"
+        "horizontal = origin.x\n"
+    };
+    const auto records_lexed = indicode::Lexer(records_source).lex();
+    const auto records_parsed = indicode::Parser(records_lexed.tokens).parse();
+    require(records_lexed.diagnostics.empty() && records_parsed.diagnostics.empty(),
+            "record declarations, named construction, and member access should parse");
+    require(records_parsed.program.records.size() == 1 &&
+                records_parsed.program.records[0].fields.size() == 2 &&
+                records_parsed.program.statements[1]->expression->kind == indicode::ExprKind::Member,
+            "record fields and member access should be represented in the AST");
+
     std::cout << "Parser tests passed\n";
 }

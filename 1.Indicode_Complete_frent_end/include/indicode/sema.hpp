@@ -32,6 +32,7 @@ private:
 
     std::vector<std::unordered_map<std::string, Binding>> scopes_;
     std::unordered_map<std::string, FunctionSignature> functions_;
+    std::unordered_map<std::string, std::unordered_map<std::string, std::string>> records_;
     std::vector<Diagnostic> diagnostics_;
     std::string current_return_type_ = "Void";
     bool in_function_ = false;

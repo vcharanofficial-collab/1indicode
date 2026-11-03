@@ -1,0 +1,64 @@
+#include "indicode/lexer.hpp"
+#include "indicode/parser.hpp"
+
+#include <cstdlib>
+#include <iostream>
+
+namespace {
+
+void require(bool condition, const char* message) {
+    if (!condition) {
+        std::cerr << "FAIL: " << message << '\n';
+        std::exit(EXIT_FAILURE);
+    }
+}
+
+}
+
+int main() {
+    const indicode::SourceFile source{
+        "parser.indi",
+        "function add(a: Int, b: Int) -> Int {\n"
+        "  total = a + 2 * b\n"
+        "  if total >= 10 { return total } else { return 0 }\n"
+        "}\n"
+        "say(\"ready\")\n"
+        "repeat 3 times { say(\"go\") }\n"
+    };
+    const auto lexed = indicode::Lexer(source).lex();
+    const auto parsed = indicode::Parser(lexed.tokens).parse();
+
+    require(lexed.diagnostics.empty(), "parser fixture should lex cleanly");
+    require(parsed.diagnostics.empty(), "valid core syntax should parse without errors");
+    require(parsed.program.functions.size() == 1, "function declaration should be captured");
+    require(parsed.program.functions[0].parameters.size() == 2,
+            "function parameters and types should be captured");
+    require(parsed.program.functions[0].body.size() == 2,
+            "function body statements should be captured");
+    const auto& assignment = parsed.program.functions[0].body[0];
+    require(assignment->kind == indicode::StmtKind::Assignment,
+            "identifier assignment should form an assignment statement");
+    require(assignment->expression->kind == indicode::ExprKind::Binary &&
+                assignment->expression->value == "+",
+            "addition should be the root of the expression");
+    require(assignment->expression->right->kind == indicode::ExprKind::Binary &&
+                assignment->expression->right->value == "*",
+            "multiplication should bind more tightly than addition");
+    require(parsed.program.statements.size() == 2,
+            "top-level calls and repeat loops should be parsed");
+
+    const indicode::SourceFile malformed{"bad.indi", "function broken(a Int) {\n  x = 1 +\n}\n"};
+    const auto malformed_tokens = indicode::Lexer(malformed).lex();
+    const auto malformed_result = indicode::Parser(malformed_tokens.tokens).parse();
+    require(!malformed_result.diagnostics.empty(),
+            "malformed syntax should produce recoverable parser diagnostics");
+    require(malformed_result.diagnostics[0].code == "E-PARSE-001",
+            "parser diagnostic code should be stable");
+
+    const std::vector<indicode::Token> empty_tokens;
+    const auto empty_result = indicode::Parser(empty_tokens).parse();
+    require(empty_result.diagnostics.empty() && empty_result.program.statements.empty(),
+            "empty token input should produce an empty program without crashing");
+
+    std::cout << "Parser tests passed\n";
+}

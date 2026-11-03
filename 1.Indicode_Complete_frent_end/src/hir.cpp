@@ -25,6 +25,7 @@ std::unique_ptr<HirExpr> lower_expression(const Expr& expression) {
     for (const auto& argument : expression.arguments) {
         result->arguments.push_back(lower_expression(*argument));
     }
+    result->argument_names = expression.argument_names;
     if (result->kind == HirExprKind::Call && result->symbol.empty()) {
         result->symbol = result->value;
     }
@@ -68,7 +69,8 @@ bool is_numeric_type(const std::string& type) {
 
 bool is_known_type(const std::string& type) {
     constexpr std::string_view list_prefix = "List<";
-    if (type.starts_with(list_prefix) && type.size() > list_prefix.size() && type.back() == '>') {
+    if (type.compare(0, list_prefix.size(), list_prefix) == 0 &&
+        type.size() > list_prefix.size() && type.back() == '>') {
         const auto element_type = type.substr(list_prefix.size(), type.size() - list_prefix.size() - 1);
         return is_known_type(element_type) && element_type != "Void";
     }
@@ -76,12 +78,13 @@ bool is_known_type(const std::string& type) {
         "Bool", "Byte", "U8", "Int2", "UInt2", "Int", "UInt", "Long", "ULong",
         "Half", "Float", "Double", "Char", "Text", "Void"
     };
-    return types.contains(type);
+    return types.find(type) != types.end();
 }
 
 std::string list_element_type(const std::string& type) {
     constexpr std::string_view list_prefix = "List<";
-    if (type.starts_with(list_prefix) && type.size() > list_prefix.size() && type.back() == '>') {
+    if (type.compare(0, list_prefix.size(), list_prefix) == 0 &&
+        type.size() > list_prefix.size() && type.back() == '>') {
         return type.substr(list_prefix.size(), type.size() - list_prefix.size() - 1);
     }
     return {};
@@ -204,7 +207,9 @@ std::vector<Diagnostic> verify_hir(const HirProgram& program) {
                 argument_types.push_back(verify_expression(*argument));
             }
             if (expression.symbol == "say") {
-                if (argument_types.size() != 1 || expression.type != "Void") {
+                const bool has_named_argument = !expression.argument_names.empty() &&
+                                                !expression.argument_names.front().empty();
+                if (argument_types.size() != 1 || expression.type != "Void" || has_named_argument) {
                     diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-010",
                                            "say call has an invalid signature", expression.span});
                 }
@@ -219,8 +224,33 @@ std::vector<Diagnostic> verify_hir(const HirProgram& program) {
             const auto& parameters = target->second->parameters;
             bool matches = parameters.size() == argument_types.size() &&
                            expression.type == target->second->return_type;
-            for (std::size_t index = 0; matches && index < parameters.size(); ++index) {
-                matches = argument_types[index] == parameters[index].type;
+            std::vector<bool> assigned(parameters.size(), false);
+            std::size_t next_positional = 0;
+            for (std::size_t index = 0; matches && index < argument_types.size(); ++index) {
+                std::size_t parameter_index = parameters.size();
+                const std::string argument_name = index < expression.argument_names.size()
+                    ? expression.argument_names[index]
+                    : "";
+                if (argument_name.empty()) {
+                    while (next_positional < assigned.size() && assigned[next_positional]) ++next_positional;
+                    if (next_positional < assigned.size()) parameter_index = next_positional++;
+                } else {
+                    for (std::size_t candidate = 0; candidate < parameters.size(); ++candidate) {
+                        if (parameters[candidate].name == argument_name) {
+                            parameter_index = candidate;
+                            break;
+                        }
+                    }
+                }
+                if (parameter_index >= parameters.size() || assigned[parameter_index] ||
+                    argument_types[index] != parameters[parameter_index].type) {
+                    matches = false;
+                } else {
+                    assigned[parameter_index] = true;
+                }
+            }
+            for (const bool parameter_assigned : assigned) {
+                matches = matches && parameter_assigned;
             }
             if (!matches) {
                 diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-012",
@@ -230,8 +260,10 @@ std::vector<Diagnostic> verify_hir(const HirProgram& program) {
         }
         case HirExprKind::ListLiteral: {
             if (expression.arguments.empty()) {
-                diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-019",
-                                       "typed list must have at least one element", expression.span});
+                if (list_element_type(expression.type).empty()) {
+                    diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-019",
+                                           "empty list has no declared element type", expression.span});
+                }
                 break;
             }
             const auto element_type = verify_expression(*expression.arguments.front());
@@ -359,6 +391,9 @@ std::string print_hir(const HirProgram& program) {
             output << "call @" << expression.symbol << '(';
             for (std::size_t index = 0; index < expression.arguments.size(); ++index) {
                 if (index != 0) output << ", ";
+                if (index < expression.argument_names.size() && !expression.argument_names[index].empty()) {
+                    output << expression.argument_names[index] << ": ";
+                }
                 print_expression(*expression.arguments[index]);
             }
             output << ") : " << expression.type;

@@ -25,6 +25,7 @@ private:
     };
 
     struct FunctionSignature {
+        std::vector<std::string> parameter_names;
         std::vector<std::string> parameter_types;
         std::string return_type;
     };

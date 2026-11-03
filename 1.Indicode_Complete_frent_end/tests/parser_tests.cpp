@@ -27,13 +27,16 @@ int main() {
         "items = [1, 2, 3]\n"
         "first = items[0]\n"
         "for item in items { say(item) }\n"
+        "named = add(b: 2, a: 1)\n"
+        "List<Int> empty = []\n"
+        "function keep(values: List<Int>) -> List<Int> { return values }\n"
     };
     const auto lexed = indicode::Lexer(source).lex();
     const auto parsed = indicode::Parser(lexed.tokens).parse();
 
     require(lexed.diagnostics.empty(), "parser fixture should lex cleanly");
     require(parsed.diagnostics.empty(), "valid core syntax should parse without errors");
-    require(parsed.program.functions.size() == 1, "function declaration should be captured");
+        require(parsed.program.functions.size() == 2, "function declarations should be captured");
     require(parsed.program.functions[0].parameters.size() == 2,
             "function parameters and types should be captured");
     require(parsed.program.functions[0].body.size() == 2,
@@ -47,8 +50,8 @@ int main() {
     require(assignment->expression->right->kind == indicode::ExprKind::Binary &&
                 assignment->expression->right->value == "*",
             "multiplication should bind more tightly than addition");
-    require(parsed.program.statements.size() == 5,
-            "calls, repeat/for-each loops, lists, and indexing should be parsed");
+        require(parsed.program.statements.size() == 7,
+            "calls, named arguments, repeat/for-each loops, lists, and indexing should parse");
     require(parsed.program.statements[2]->expression->kind == indicode::ExprKind::ListLiteral,
             "bracketed values should parse as list literals");
     require(parsed.program.statements[3]->expression->kind == indicode::ExprKind::Index,
@@ -56,12 +59,23 @@ int main() {
     require(parsed.program.statements[4]->kind == indicode::StmtKind::ForEach &&
                 parsed.program.statements[4]->name == "item",
             "for-each should retain its iteration binding");
+        require(parsed.program.statements[5]->expression->argument_names[0] == "b" &&
+                                parsed.program.statements[5]->expression->argument_names[1] == "a",
+                        "parser should retain named argument labels and order");
+        require(parsed.program.statements[6]->declared_type == "List<Int>" &&
+                                parsed.program.functions[1].parameters[0].type == "List<Int>" &&
+                                parsed.program.functions[1].return_type == "List<Int>",
+                        "generic list types should parse in declarations and function signatures");
 
-    const indicode::SourceFile malformed{"bad.indi", "function broken(a Int) {\n  x = 1 +\n}\n"};
+        const indicode::SourceFile malformed{
+                "bad.indi",
+                "function broken(a Int) {\n  x = 1 +\n}\n"
+                "call = add(a: 1, 2)\n"
+        };
     const auto malformed_tokens = indicode::Lexer(malformed).lex();
     const auto malformed_result = indicode::Parser(malformed_tokens.tokens).parse();
-    require(!malformed_result.diagnostics.empty(),
-            "malformed syntax should produce recoverable parser diagnostics");
+    require(malformed_result.diagnostics.size() >= 2,
+            "malformed syntax and positional-after-named calls should be diagnosed");
     require(malformed_result.diagnostics[0].code == "E-PARSE-001",
             "parser diagnostic code should be stable");
 

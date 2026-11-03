@@ -27,6 +27,7 @@ struct Expr {
     std::unique_ptr<Expr> left;
     std::unique_ptr<Expr> right;
     std::vector<std::unique_ptr<Expr>> arguments;
+    std::vector<std::string> argument_names;
 };
 
 enum class StmtKind {

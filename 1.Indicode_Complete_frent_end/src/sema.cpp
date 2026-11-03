@@ -27,6 +27,32 @@ std::string get_list_element_type(const std::string& type) {
     return {};
 }
 
+bool parse_integer_magnitude(const std::string& spelling, std::uint64_t& value) {
+    std::string digits;
+    digits.reserve(spelling.size());
+    for (const char character : spelling) {
+        if (character != '_') digits.push_back(character);
+    }
+    unsigned base = 10;
+    std::size_t prefix_length = 0;
+    if (digits.size() >= 2 && digits[0] == '0') {
+        if (digits[1] == 'b' || digits[1] == 'B') { base = 2; prefix_length = 2; }
+        else if (digits[1] == 'o' || digits[1] == 'O') { base = 8; prefix_length = 2; }
+        else if (digits[1] == 'x' || digits[1] == 'X') { base = 16; prefix_length = 2; }
+    }
+    if (prefix_length == digits.size()) return false;
+    const auto* begin = digits.data() + prefix_length;
+    const auto* end = digits.data() + digits.size();
+    const auto parsed = std::from_chars(begin, end, value, static_cast<int>(base));
+    return parsed.ec == std::errc{} && parsed.ptr == end;
+}
+
+bool is_integer_spelling(const std::string& spelling) {
+    return spelling.size() < 2 || spelling[0] != '0' ||
+           (spelling[1] != 'b' && spelling[1] != 'B' && spelling[1] != 'o' &&
+            spelling[1] != 'O' && spelling[1] != 'x' && spelling[1] != 'X');
+}
+
 bool is_integer_literal_expression(const Expr& expression) {
     if (expression.kind == ExprKind::Literal) {
         return !expression.value.empty() && expression.value.front() >= '0' &&
@@ -75,6 +101,7 @@ SemanticResult Analyzer::analyze(Program& program) {
         FunctionSignature signature;
         signature.return_type = function.return_type.empty() ? "Void" : function.return_type;
         for (const auto& parameter : function.parameters) {
+            signature.parameter_names.push_back(parameter.name);
             signature.parameter_types.push_back(parameter.type);
             if (!is_known_type(parameter.type)) {
                 add_error("E-SEMA-002", "unknown parameter type", parameter.span);
@@ -165,7 +192,12 @@ void Analyzer::analyze_statement(Stmt& statement) {
             const bool has_explicit_type = !statement.declared_type.empty();
             const auto type = statement.declared_type;
         std::string value_type;
-            if (has_explicit_type && is_integer_type(type) &&
+            if (has_explicit_type && !list_element_type(type).empty() &&
+                statement.expression->kind == ExprKind::ListLiteral &&
+                statement.expression->arguments.empty()) {
+                statement.expression->inferred_type = type;
+                value_type = type;
+            } else if (has_explicit_type && is_integer_type(type) &&
             is_integer_literal_expression(*statement.expression)) {
             if (!type_integer_literal(*statement.expression, type)) {
                 add_error("E-SEMA-022", "integer literal is outside the declared type range",
@@ -278,16 +310,14 @@ std::string Analyzer::analyze_expression(Expr& expression) {
             type = "Bool";
         } else if (!expression.value.empty() && expression.value.front() == '"') {
             type = literal_string_type(expression.value);
-        } else if (expression.value.find_first_of(".eE") != std::string::npos) {
+        } else if (is_integer_spelling(expression.value) &&
+                   expression.value.find_first_of(".eE") != std::string::npos) {
             type = "Float";
         } else {
-            std::int64_t value = 0;
-            const auto* begin = expression.value.data();
-            const auto* end = begin + expression.value.size();
-            const auto parsed = std::from_chars(begin, end, value);
-            if (parsed.ec != std::errc{} || parsed.ptr != end ||
-                value < std::numeric_limits<std::int32_t>::min() ||
-                value > std::numeric_limits<std::int32_t>::max()) {
+            std::uint64_t magnitude = 0;
+            if (!parse_integer_magnitude(expression.value, magnitude)) {
+                add_error("E-SEMA-012", "integer literal is outside the supported range", expression.span);
+            } else if (magnitude > static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max())) {
                 add_error("E-SEMA-012", "integer literal is outside the Int range", expression.span);
             } else {
                 type = "Int";
@@ -347,7 +377,8 @@ std::string Analyzer::analyze_expression(Expr& expression) {
             argument_types.push_back(analyze_expression(*argument));
         }
         if (expression.value == "say") {
-            if (argument_types.size() != 1) {
+            if (argument_types.size() != 1 ||
+                (!expression.argument_names.empty() && !expression.argument_names[0].empty())) {
                 add_error("E-SEMA-017", "say expects exactly one argument", expression.span);
             } else {
                 type = "Void";
@@ -359,10 +390,50 @@ std::string Analyzer::analyze_expression(Expr& expression) {
             } else if (function->second.parameter_types.size() != argument_types.size()) {
                 add_error("E-SEMA-019", "function argument count does not match signature", expression.span);
             } else {
+                std::vector<bool> assigned(argument_types.size(), false);
                 bool arguments_match = true;
+                std::size_t next_positional = 0;
                 for (std::size_t index = 0; index < argument_types.size(); ++index) {
+                    std::size_t parameter_index = argument_types.size();
+                    const std::string argument_name = index < expression.argument_names.size()
+                        ? expression.argument_names[index]
+                        : "";
+                    if (argument_name.empty()) {
+                        while (next_positional < assigned.size() && assigned[next_positional]) ++next_positional;
+                        if (next_positional < assigned.size()) parameter_index = next_positional++;
+                    } else {
+                        for (std::size_t candidate = 0; candidate < function->second.parameter_names.size(); ++candidate) {
+                            if (function->second.parameter_names[candidate] == argument_name) {
+                                parameter_index = candidate;
+                                break;
+                            }
+                        }
+                        if (parameter_index == argument_types.size()) {
+                            add_error("E-SEMA-028", "unknown named argument", expression.arguments[index]->span);
+                            arguments_match = false;
+                            continue;
+                        }
+                    }
+                    if (parameter_index >= assigned.size()) {
+                        add_error("E-SEMA-029", "too many positional arguments", expression.arguments[index]->span);
+                        arguments_match = false;
+                        continue;
+                    }
+                    if (assigned[parameter_index]) {
+                        add_error("E-SEMA-030", "function parameter was supplied more than once",
+                                  expression.arguments[index]->span);
+                        arguments_match = false;
+                        continue;
+                    }
+                    assigned[parameter_index] = true;
                     if (argument_types[index] != error_type &&
-                        argument_types[index] != function->second.parameter_types[index]) {
+                        argument_types[index] != function->second.parameter_types[parameter_index]) {
+                        arguments_match = false;
+                    }
+                }
+                for (std::size_t index = 0; index < assigned.size(); ++index) {
+                    if (!assigned[index]) {
+                        add_error("E-SEMA-031", "missing required function argument", expression.span);
                         arguments_match = false;
                     }
                 }
@@ -419,10 +490,7 @@ bool Analyzer::type_integer_literal(Expr& expression, const std::string& type) {
     const bool negative = expression.kind == ExprKind::Unary;
     Expr& literal = negative ? *expression.left : expression;
     std::uint64_t magnitude = 0;
-    const auto* begin = literal.value.data();
-    const auto* end = begin + literal.value.size();
-    const auto parsed = std::from_chars(begin, end, magnitude);
-    if (parsed.ec != std::errc{} || parsed.ptr != end) {
+    if (!parse_integer_magnitude(literal.value, magnitude)) {
         return false;
     }
 

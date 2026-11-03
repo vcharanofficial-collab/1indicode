@@ -43,6 +43,31 @@ bool Parser::check(TokenKind kind) const {
     return peek().kind == kind;
 }
 
+bool Parser::check_next(TokenKind kind) const {
+    return current_ + 1 < tokens_.size() && tokens_[current_ + 1].kind == kind;
+}
+
+bool Parser::generic_type_declaration_ahead() const {
+    if (!check(TokenKind::Less)) {
+        return false;
+    }
+    std::size_t depth = 0;
+    for (std::size_t index = current_; index < tokens_.size(); ++index) {
+        if (tokens_[index].kind == TokenKind::Less) {
+            ++depth;
+        } else if (tokens_[index].kind == TokenKind::Greater) {
+            if (--depth == 0) {
+                return index + 1 < tokens_.size() && tokens_[index + 1].kind == TokenKind::Identifier;
+            }
+        } else if (tokens_[index].kind == TokenKind::EndOfFile ||
+                   tokens_[index].kind == TokenKind::Newline ||
+                   tokens_[index].kind == TokenKind::LeftBrace) {
+            return false;
+        }
+    }
+    return false;
+}
+
 bool Parser::check_keyword(const char* keyword) const {
     return check(TokenKind::Keyword) && peek().lexeme == keyword;
 }
@@ -119,6 +144,22 @@ void Parser::declaration() {
     }
 }
 
+std::string Parser::parse_type() {
+    const auto* name = consume_identifier("expected a type name");
+    if (name == nullptr) {
+        return {};
+    }
+    std::string type = name->lexeme;
+    if (match(TokenKind::Less)) {
+        const auto argument_type = parse_type();
+        if (argument_type.empty() || consume(TokenKind::Greater, "expected '>' after type argument") == nullptr) {
+            return {};
+        }
+        type += '<' + argument_type + '>';
+    }
+    return type;
+}
+
 bool Parser::function_declaration() {
     const auto& function_keyword = previous();
     const auto* name = consume_identifier("expected function name");
@@ -136,12 +177,12 @@ bool Parser::function_declaration() {
             if (parameter_name == nullptr || consume(TokenKind::Colon, "expected ':' after parameter name") == nullptr) {
                 return false;
             }
-            const auto* parameter_type = consume_identifier("expected parameter type");
-            if (parameter_type == nullptr) {
+            const auto parameter_type = parse_type();
+            if (parameter_type.empty()) {
                 return false;
             }
-            function.parameters.push_back({parameter_name->lexeme, parameter_type->lexeme,
-                                           {parameter_name->span.start, parameter_type->span.end}});
+            function.parameters.push_back({parameter_name->lexeme, parameter_type,
+                                           {parameter_name->span.start, previous().span.end}});
         } while (match(TokenKind::Comma));
     }
 
@@ -149,11 +190,10 @@ bool Parser::function_declaration() {
         return false;
     }
     if (match(TokenKind::Arrow)) {
-        const auto* return_type = consume_identifier("expected return type after '->'");
-        if (return_type == nullptr) {
+        function.return_type = parse_type();
+        if (function.return_type.empty()) {
             return false;
         }
-        function.return_type = return_type->lexeme;
     }
     if (consume(TokenKind::LeftBrace, "expected '{' before function body") == nullptr) {
         return false;
@@ -190,10 +230,13 @@ std::unique_ptr<Stmt> Parser::statement() {
     }
     if (match(TokenKind::Identifier)) {
         const auto identifier = previous();
-        if (check(TokenKind::Identifier)) {
+        if (check(TokenKind::Identifier) || generic_type_declaration_ahead()) {
             --current_;
-            const auto type = advance();
-            return variable_statement(true, &type);
+            const auto type = parse_type();
+            if (type.empty()) {
+                return nullptr;
+            }
+            return variable_statement(true, type);
         }
         if (match(TokenKind::Equal)) {
             auto result = std::make_unique<Stmt>();
@@ -220,21 +263,17 @@ std::unique_ptr<Stmt> Parser::statement() {
     return result;
 }
 
-std::unique_ptr<Stmt> Parser::variable_statement(bool mutable_binding, const Token* type_token) {
+std::unique_ptr<Stmt> Parser::variable_statement(bool mutable_binding, std::string declared_type) {
     const auto* name = consume_identifier("expected variable name");
     if (name == nullptr) {
         return nullptr;
     }
 
-    std::string declared_type;
     if (match(TokenKind::Colon)) {
-        const auto* type = consume_identifier("expected type after ':'");
-        if (type == nullptr) {
+        declared_type = parse_type();
+        if (declared_type.empty()) {
             return nullptr;
         }
-        declared_type = type->lexeme;
-    } else if (type_token != nullptr) {
-        declared_type = type_token->lexeme;
     }
 
     if (consume(TokenKind::Equal, "expected '=' before variable initializer") == nullptr) {
@@ -495,13 +534,24 @@ std::unique_ptr<Expr> Parser::finish_call(std::unique_ptr<Expr> callee) {
     result->kind = ExprKind::Call;
     result->span.start = callee->span.start;
     result->value = callee->value;
+    bool saw_named_argument = false;
     if (!check(TokenKind::RightParen)) {
         do {
+            std::string argument_name;
+            if (check(TokenKind::Identifier) && check_next(TokenKind::Colon)) {
+                saw_named_argument = true;
+                argument_name = advance().lexeme;
+                advance();
+            } else if (saw_named_argument) {
+                error(peek(), "positional arguments cannot follow named arguments");
+                return nullptr;
+            }
             auto argument = expression();
             if (!argument) {
                 return nullptr;
             }
             result->arguments.push_back(std::move(argument));
+            result->argument_names.push_back(std::move(argument_name));
         } while (match(TokenKind::Comma));
     }
     const auto* closing = consume(TokenKind::RightParen, "expected ')' after arguments");

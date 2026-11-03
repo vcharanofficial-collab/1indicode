@@ -11,6 +11,13 @@ bool is_digit(char value) {
     return value >= '0' && value <= '9';
 }
 
+int digit_value(char value) {
+    if (value >= '0' && value <= '9') return value - '0';
+    if (value >= 'a' && value <= 'f') return value - 'a' + 10;
+    if (value >= 'A' && value <= 'F') return value - 'A' + 10;
+    return -1;
+}
+
 bool is_alpha(char value) {
     return (value >= 'a' && value <= 'z') ||
            (value >= 'A' && value <= 'Z') || value == '_';
@@ -200,7 +207,13 @@ void Lexer::scan_token() {
     case ';': add_token(TokenKind::Semicolon, start); return;
     case '+': add_token(TokenKind::Plus, start); return;
     case '*': add_token(TokenKind::Star, start); return;
-    case '/': add_token(TokenKind::Slash, start); return;
+    case '/':
+        if (match('*')) {
+            scan_block_comment(start);
+        } else {
+            add_token(TokenKind::Slash, start);
+        }
+        return;
     case '%': add_token(TokenKind::Percent, start); return;
     case '~': add_token(TokenKind::Tilde, start); return;
     case '-': add_token(match('>') ? TokenKind::Arrow : TokenKind::Minus, start); return;
@@ -257,20 +270,47 @@ void Lexer::scan_identifier(SourceLocation start) {
 }
 
 void Lexer::scan_number(SourceLocation start) {
-    while (is_digit(current())) {
-        advance();
+    unsigned base = 10;
+    if (source_.contents[start.offset] == '0') {
+        if (current() == 'b' || current() == 'B') base = 2;
+        else if (current() == 'o' || current() == 'O') base = 8;
+        else if (current() == 'x' || current() == 'X') base = 16;
+        if (base != 10) advance();
     }
 
+    bool malformed = false;
+    auto scan_digits = [&](unsigned radix) {
+        bool saw_digit = base == 10;
+        bool previous_was_digit = base == 10;
+        while (true) {
+            const int digit = digit_value(current());
+            if (digit >= 0 && static_cast<unsigned>(digit) < radix) {
+                advance();
+                saw_digit = true;
+                previous_was_digit = true;
+            } else if (current() == '_') {
+                const int next_digit = digit_value(peek());
+                if (!previous_was_digit || next_digit < 0 || static_cast<unsigned>(next_digit) >= radix) {
+                    malformed = true;
+                }
+                advance();
+                previous_was_digit = false;
+            } else {
+                break;
+            }
+        }
+        if (!saw_digit) malformed = true;
+    };
+
+    scan_digits(base);
     bool is_float = false;
-    if (current() == '.' && is_digit(peek())) {
+    if (base == 10 && current() == '.' && is_digit(peek())) {
         is_float = true;
         advance();
-        while (is_digit(current())) {
-            advance();
-        }
+        scan_digits(10);
     }
 
-    if (current() == 'e' || current() == 'E') {
+    if (base == 10 && (current() == 'e' || current() == 'E')) {
         is_float = true;
         advance();
         if (current() == '+' || current() == '-') {
@@ -281,9 +321,21 @@ void Lexer::scan_number(SourceLocation start) {
             add_token(TokenKind::Invalid, start);
             return;
         }
-        while (is_digit(current())) {
-            advance();
-        }
+        scan_digits(10);
+    }
+
+    if (base != 10 && (is_alphanumeric(current()) || current() == '_')) {
+        malformed = true;
+        while (is_alphanumeric(current()) || current() == '_') advance();
+    } else if (is_alpha(current())) {
+        malformed = true;
+        while (is_alphanumeric(current())) advance();
+    }
+
+    if (malformed) {
+        add_error("E-LEX-009", "malformed integer literal or unsupported numeric suffix", start);
+        add_token(TokenKind::Invalid, start);
+        return;
     }
 
     add_token(is_float ? TokenKind::FloatLiteral : TokenKind::IntegerLiteral, start);
@@ -364,6 +416,36 @@ void Lexer::scan_string(SourceLocation start) {
         return;
     }
     add_token(valid ? TokenKind::StringLiteral : TokenKind::Invalid, start);
+}
+
+void Lexer::scan_block_comment(SourceLocation start) {
+    std::size_t depth = 1;
+    while (!at_end() && depth > 0) {
+        if (current() == '/' && peek() == '*') {
+            advance();
+            advance();
+            ++depth;
+        } else if (current() == '*' && peek() == '/') {
+            advance();
+            advance();
+            --depth;
+        } else if (current() == '\r' || current() == '\n') {
+            const auto newline_start = location();
+            const char newline = advance();
+            if (newline == '\r' && current() == '\n') {
+                advance();
+            }
+            ++line_;
+            column_ = 1;
+            result_.tokens.push_back({TokenKind::Newline, "\n", {newline_start, location()}});
+        } else {
+            advance();
+        }
+    }
+    if (depth != 0) {
+        add_error("E-LEX-010", "unterminated block comment", start);
+        add_token(TokenKind::Invalid, start);
+    }
 }
 
 }

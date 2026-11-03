@@ -72,5 +72,42 @@ int main() {
                 invalid_escape_result.diagnostics[0].code == "E-LEX-007",
             "unsupported string escapes should have a stable diagnostic");
 
+        const indicode::SourceFile numeric_literals{
+            "numbers.indi",
+            "binary = 0b1010\noctal = 0o17\nhex = 0x2a\ngrouped = 1_000_000\n"
+        };
+        const auto numeric_result = indicode::Lexer(numeric_literals).lex();
+        require(numeric_result.diagnostics.empty(),
+                "binary, octal, hexadecimal, and separated integer literals should lex");
+
+        const indicode::SourceFile malformed_numbers{
+            "bad_numbers.indi",
+            "bad_binary = 0b102\nbad_hex = 0x\nbad_separator = 12__3\n"
+        };
+        const auto malformed_number_result = indicode::Lexer(malformed_numbers).lex();
+        require(malformed_number_result.diagnostics.size() == 3,
+                "invalid radix digits, missing radix digits, and misplaced separators should be rejected");
+        require(malformed_number_result.diagnostics[0].code == "E-LEX-009",
+                "malformed numeric diagnostic should have a stable code");
+
+        const indicode::SourceFile comments{
+            "comments.indi",
+            "first = 1 /* outer\n/* nested */ comment */ second = 2\n"
+        };
+        const auto comment_result = indicode::Lexer(comments).lex();
+        require(comment_result.diagnostics.empty(), "nested block comments should be accepted");
+        bool preserved_comment_newline = false;
+        for (const auto& token : comment_result.tokens) {
+            preserved_comment_newline = preserved_comment_newline ||
+                                        (token.kind == indicode::TokenKind::Newline && token.span.start.line == 1);
+        }
+        require(preserved_comment_newline, "block-comment newlines should remain statement separators");
+
+        const indicode::SourceFile open_comment{"open_comment.indi", "value = 1 /* never closed"};
+        const auto open_comment_result = indicode::Lexer(open_comment).lex();
+        require(open_comment_result.diagnostics.size() == 1 &&
+                    open_comment_result.diagnostics[0].code == "E-LEX-010",
+                "unterminated block comments should produce a recoverable diagnostic");
+
     std::cout << "Lexer tests passed\n";
 }

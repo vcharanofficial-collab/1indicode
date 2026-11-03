@@ -38,6 +38,7 @@ private:
     void scan_identifier(SourceLocation start);
     void scan_number(SourceLocation start);
     void scan_string(SourceLocation start);
+    void scan_block_comment(SourceLocation start);
 };
 
 }

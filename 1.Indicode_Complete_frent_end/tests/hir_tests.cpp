@@ -22,8 +22,9 @@ int main() {
     const indicode::SourceFile source{
         "hir.indi",
         "function add(a: Int, b: Int) -> Int { return a + b }\n"
+        "List<Int> empty = []\n"
         "items = [20, 22]\n"
-        "answer = add(items[0], items[1])\n"
+        "answer = add(b: items[1], a: items[0])\n"
         "for item in items { say(item) }\n"
     };
     const auto lexed = indicode::Lexer(source).lex();
@@ -34,12 +35,13 @@ int main() {
     require(semantic.diagnostics.empty(), "HIR fixture should pass semantic checks");
 
     auto hir = indicode::lower_to_hir(parsed.program);
-    require(hir.functions.size() == 1 && hir.statements.size() == 3,
+    require(hir.functions.size() == 1 && hir.statements.size() == 4,
             "lowering should preserve function and top-level statement structure");
     require(indicode::verify_hir(hir).empty(), "lowered typed HIR should verify");
     const auto printed = indicode::print_hir(hir);
     require(printed.find("func @add") != std::string::npos &&
                 printed.find("call @add") != std::string::npos &&
+                printed.find("b: ") != std::string::npos &&
                 printed.find("list<List<Int>>") != std::string::npos &&
                 printed.find("for %item: Int in") != std::string::npos,
             "typed HIR printer should show functions, collections, loops, and types");

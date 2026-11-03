@@ -28,6 +28,7 @@ struct HirExpr {
     std::unique_ptr<HirExpr> left;
     std::unique_ptr<HirExpr> right;
     std::vector<std::unique_ptr<HirExpr>> arguments;
+    std::vector<std::string> argument_names;
 };
 
 enum class HirStmtKind {

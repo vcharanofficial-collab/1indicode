@@ -28,6 +28,8 @@ private:
     const Token& previous() const;
     bool at_end() const;
     bool check(TokenKind kind) const;
+    bool check_next(TokenKind kind) const;
+    bool generic_type_declaration_ahead() const;
     bool check_keyword(const char* keyword) const;
     const Token& advance();
     bool match(TokenKind kind);
@@ -38,9 +40,10 @@ private:
     void skip_separators();
     void synchronize();
     void declaration();
+    std::string parse_type();
     bool function_declaration();
     std::unique_ptr<Stmt> statement();
-    std::unique_ptr<Stmt> variable_statement(bool mutable_binding, const Token* type_token = nullptr);
+    std::unique_ptr<Stmt> variable_statement(bool mutable_binding, std::string declared_type = {});
     std::unique_ptr<Stmt> return_statement(const Token& keyword);
     std::unique_ptr<Stmt> if_statement(const Token& keyword);
     std::unique_ptr<Stmt> while_statement(const Token& keyword);

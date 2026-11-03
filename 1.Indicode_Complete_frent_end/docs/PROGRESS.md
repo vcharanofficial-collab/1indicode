@@ -95,8 +95,8 @@ LLVM/backend work begins only after these front-end milestones are complete and 
 
 ## Latest verification
 
-- A fresh out-of-tree CMake configure/build succeeded with GCC 13.3.
+- A fresh Release-mode out-of-tree CMake configure/build succeeded with GCC 13.3 in `/tmp/indicode-full-verify-build`.
 - All 13 CTest cases pass, including the separately built installed-package consumer.
 - The suite also verifies nested `else if` return coverage, malformed HIR return-path rejection, invalid HIR parameter/call/return/symbol-scope invariants, UTF-8/tab diagnostic caret alignment, and float literal overflow/underflow rejection.
 - Lexer regression tests confirm that UTF-8 byte offsets and human-facing source columns remain distinct and consistent after tabs and non-ASCII string contents.
-- The verification build was kept outside the project at `/tmp/indicode-progress-build`; no generated build files were added to the repository.
+- The verification build was kept outside the project; no generated build files were added to the repository.

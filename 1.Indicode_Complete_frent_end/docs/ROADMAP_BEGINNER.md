@@ -25,6 +25,7 @@ The estimate uses the weighted acceptance areas in `PROGRESS.md`:
 - Local variables, parameters, and loop bindings receive stable IDs that are checked through HIR lowering and independent HIR verification.
 - The library can be installed and used by a separate CMake consumer project.
 - `indicode typed-json` emits verified HIR as JSON with a schema version and stable local binding IDs; deserialization and a compatibility policy are still future work.
+- `indicode ast-json` serializes parsed declarations and syntax nodes with source spans; golden snapshots and a compatibility policy remain future work.
 - Updated weighted estimate: **95.00%** (see `PROGRESS.md`).
 
 This is an estimate, not a marketing score. It may go down if a review finds missing acceptance behavior. Passing tests prove only the tested cases, not completeness of the language.
@@ -39,7 +40,7 @@ This is an estimate, not a marketing score. It may go down if a review finds mis
 - The HIR verifier checks required type annotations, expression/operator types, function calls, and return types.
 - Lists can be created, indexed, and iterated with `for`; text can also be iterated/indexed as `Char` values.
 - UTF-8 is validated throughout the source, including strings and comments; supported string escapes include Unicode scalar escapes such as `\u{e9}`. A single Unicode scalar infers `Char`, more infer `Text`.
-- `indicode check`, `tokens`, `ast`, `typed`, and opt-in `--json-diagnostics` work for the current subset.
+- `indicode check`, `tokens`, `ast`, `ast-json`, `typed`, `typed-json`, and opt-in `--json-diagnostics` work for the current subset.
 - Integer literals support `0b` binary, `0o` octal, `0x` hexadecimal, and `_` digit separators; malformed forms are rejected.
 - Function calls accept named arguments such as `add(b: 22, a: 20)` and reject unknown, duplicate, missing, or out-of-order arguments.
 - Nested block comments use `/* ... */`; newlines inside them still separate statements. An unclosed comment is a compile-time error.
@@ -48,7 +49,7 @@ This is an estimate, not a marketing score. It may go down if a review finds mis
 - Tensor function signatures support numeric element types and static or symbolic dimensions, such as `Tensor<Float, [Batch, 784]>`; incompatible shapes are rejected by exact type checking.
 - Integer ranges such as `0..10` are parsed and type-checked; `for item in 0..10` binds `item` to the bound integer type.
 - `else if` chains are parsed into nested conditionals, and each branch participates in non-`Void` return-path checks.
-- Fourteen CTest cases include typed-HIR JSON validation, parser recovery/fix-its, HIR symbol/scope checks, an installed-package consumer, a deterministic malformed-input smoke test, tensor shapes, and record/conversion samples.
+- Fifteen CTest cases include AST and typed-HIR JSON validation, parser recovery/fix-its, HIR symbol/scope checks, an installed-package consumer, a deterministic malformed-input smoke test, tensor shapes, and record/conversion samples.
 
 ## Newly Supported Syntax
 

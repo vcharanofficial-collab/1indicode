@@ -91,5 +91,6 @@ struct Program {
 };
 
 std::string print_program(const Program& program, bool include_types = false);
+std::string serialize_ast_json(const Program& program);
 
 }

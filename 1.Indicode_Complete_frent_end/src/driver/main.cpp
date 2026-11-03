@@ -34,12 +34,13 @@ int main(int argc, char** argv) {
         ++argument;
     }
     if (argc - argument != 2) {
-        std::cerr << "usage: indicode [--json-diagnostics] <check|tokens|ast|typed|typed-json> <file.indi>\n";
+        std::cerr << "usage: indicode [--json-diagnostics] <check|tokens|ast|ast-json|typed|typed-json> <file.indi>\n";
         return 2;
     }
 
     const std::string command = argv[argument++];
     if (command != "check" && command != "tokens" && command != "ast" &&
+        command != "ast-json" &&
         command != "typed" && command != "typed-json") {
         std::cerr << "unknown command: " << command << '\n';
         return 2;
@@ -79,6 +80,10 @@ int main(int argc, char** argv) {
     }
     if (command == "ast") {
         std::cout << indicode::print_program(parsed.program);
+        return 0;
+    }
+    if (command == "ast-json") {
+        std::cout << indicode::serialize_ast_json(parsed.program) << '\n';
         return 0;
     }
 

@@ -152,5 +152,14 @@ int main() {
                 else_if_parsed.program.functions[0].body[0]->else_body[0]->kind == indicode::StmtKind::If,
             "else-if chains should parse as nested conditional statements");
 
+    const indicode::SourceFile escaped_source{"escaped.indi", "say(\"a\\\"b\")\n"};
+    const auto escaped_lexed = indicode::Lexer(escaped_source).lex();
+    const auto escaped_parsed = indicode::Parser(escaped_lexed.tokens).parse();
+    const auto ast_json = indicode::serialize_ast_json(escaped_parsed.program);
+    require(escaped_lexed.diagnostics.empty() && escaped_parsed.diagnostics.empty() &&
+                ast_json.find("\"schemaVersion\":1") != std::string::npos &&
+                ast_json.find("a\\\\\\\"b") != std::string::npos,
+            "AST JSON should version its schema and escape string literal contents");
+
     std::cout << "Parser tests passed\n";
 }

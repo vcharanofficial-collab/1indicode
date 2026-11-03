@@ -13,6 +13,7 @@ add_library(indicode_frontend
     src/parser.cpp
     src/sema.cpp
     src/ast_printer.cpp
+    src/ast_json.cpp
     src/hir.cpp
     src/diagnostic.cpp
 )
@@ -83,6 +84,12 @@ if(BUILD_TESTING)
     add_test(NAME cli_check COMMAND indicode check ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/hello.indi)
     add_test(NAME cli_record_check COMMAND indicode check ${CMAKE_CURRENT_SOURCE_DIR}/examples/records.indi)
     add_test(NAME cli_tensor_shape_check COMMAND indicode check ${CMAKE_CURRENT_SOURCE_DIR}/examples/tensor_shapes.indi)
+    add_test(NAME cli_ast_json
+        COMMAND ${CMAKE_COMMAND}
+            -DINDICODE=$<TARGET_FILE:indicode>
+            -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/examples/records.indi
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_ast_json.cmake
+    )
     add_test(NAME cli_typed_json
         COMMAND ${CMAKE_COMMAND}
             -DINDICODE=$<TARGET_FILE:indicode>

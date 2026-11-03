@@ -50,7 +50,7 @@ This is an estimate, not a marketing score. It may go down if a review finds mis
 - Tensor function signatures support numeric element types and static or symbolic dimensions, such as `Tensor<Float, [Batch, 784]>`; incompatible shapes are rejected by exact type checking.
 - Integer ranges such as `0..10` are parsed and type-checked; `for item in 0..10` binds `item` to the bound integer type.
 - `else if` chains are parsed into nested conditionals, and each branch participates in non-`Void` return-path checks.
-- Sixteen CTest cases include source-manager line/column checks, AST and typed-HIR JSON validation, parser recovery/fix-its, HIR symbol/scope checks, an installed-package consumer, a deterministic malformed-input smoke test, tensor shapes, and record/conversion samples.
+- Seventeen CTest cases include source-manager line/column checks, AST-printer golden output, AST and typed-HIR JSON validation, parser recovery/fix-its, HIR symbol/scope checks, an installed-package consumer, a deterministic malformed-input smoke test, tensor shapes, and record/conversion samples.
 
 ## Newly Supported Syntax
 

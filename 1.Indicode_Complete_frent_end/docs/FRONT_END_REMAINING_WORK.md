@@ -44,7 +44,7 @@ These inventory counts and the 95.20% weighted estimate measure different things
 | 459 | AST context | Not started | Add a clear AST owner/context and lifetime contract for parsed programs and source references. |
 | 460 | AST node arena | Not started | Use an arena or document/measure an alternative ownership design; test destruction and large-input behavior. |
 | 461 | AST visitor | Not started | Provide exhaustive, type-safe visitors and tests that every node kind is visited. |
-| 462 | AST printer | Partial | Add deterministic AST printer golden tests covering every accepted v1 declaration, statement, and expression node. |
+| 462 | AST printer | Partial | Deterministic golden test now covers every currently implemented declaration, statement, and expression node; repeat this against the frozen v1 grammar before accepting the item. |
 | 463 | AST serializer | Done | Keep schema-v1 JSON tests for every node and span; define compatibility policy before treating the schema as stable. |
 | 464 | Syntax recovery | Partial | Recover at declaration, statement, and expression boundaries; test multiple errors without losing later valid declarations. |
 | 465 | Error synchronization | Partial | Specify synchronization tokens/sets and add regression tests for cascading-error suppression. |
@@ -114,4 +114,4 @@ Report **100% for the agreed v1 front-end scope only** after all of the followin
 3. Full conformance, fuzz, sanitizer, clean-build, and package-consumer checks pass in CI.
 4. No known required item remains partial or unimplemented; documentation and acceptance evidence are current.
 
-The 16-test suite passing is evidence for its tested cases, not by itself proof of 100% language or production readiness. LLVM, machine-code generation, runtime execution, and AI/device backends remain outside this plan.
+The 17-test suite passing is evidence for its tested cases, not by itself proof of 100% language or production readiness. LLVM, machine-code generation, runtime execution, and AI/device backends remain outside this plan.

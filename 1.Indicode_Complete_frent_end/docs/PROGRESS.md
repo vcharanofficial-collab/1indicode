@@ -26,7 +26,7 @@ The percentage measures progress toward the agreed front-end-only boundary in th
 | Type checking and semantic validation | 15% | 98% | Scalar/radix integer inference, integer and floating literal range checks, checked numeric conversions, record construction/field types, tensor element/shape compatibility, integer range bounds, indexing, nested conditional return analysis, loops and mutability; tensor operations, ownership/effects and full conversion policies remain. |
 | Typed HIR and verification | 15% | 99% | Project-owned typed HIR carries stable local binding IDs, has a schema-versioned JSON serializer, and covers records, member access, tensor types, checked numeric conversions, collections, and integer ranges; verifier rechecks lexical visibility, type identity, immutability, return paths, and expression/call/loop contracts. Deserialization, compatibility policy, and broader language invariants remain. |
 | CLI and diagnostics tooling | 5% | 95% | `check`, `tokens`, `ast`, `ast-json`, `typed`, `typed-json`, source excerpts/carets aligned across tabs and UTF-8 scalar columns, and JSON diagnostics with fix-its; terminal-specific display widths, editor interfaces, and stable diagnostics/HIR compatibility policies remain. |
-| Tests, docs, and integration | 10% | 99% | Sixteen CTest cases cover source-manager line/column mapping, parser recovery/fix-its, schema-versioned AST/HIR JSON, symbol identity/scope/mutability in HIR, nested `else if` return paths, float literal bounds, deterministic malformed-input smoke testing, tensor shapes, diagnostics, CLI, and an installed-package consumer; full conformance, coverage-guided fuzzing, sanitizers and CI remain. |
+| Tests, docs, and integration | 10% | 99% | Seventeen CTest cases cover source-manager line/column mapping, parser recovery/fix-its, deterministic AST-printer golden output for every currently implemented node kind, schema-versioned AST/HIR JSON, symbol identity/scope/mutability in HIR, nested `else if` return paths, float literal bounds, deterministic malformed-input smoke testing, tensor shapes, diagnostics, CLI, and an installed-package consumer; full conformance, coverage-guided fuzzing, sanitizers and CI remain. |
 
 Updated weighted estimate: 4.75 + 9.2 + 13.8 + 14.25 + 9.0 + 14.7 + 14.85 + 4.75 + 9.9 = **95.20%, rounded to 95%**. This is a judgment-based estimate for the implemented front-end boundary, not a claim that 95% of a complete language specification or all possible compiler work is done.
 
@@ -83,7 +83,7 @@ Updated weighted estimate: 4.75 + 9.2 + 13.8 + 14.25 + 9.0 + 14.7 + 14.85 + 4.75
 - Identifiers are ASCII-only. UTF-8 source sequences are validated, but Unicode identifier rules and full Unicode display-column mapping are not implemented.
 - Numeric suffixes, raw strings, and the complete string escape repertoire remain incomplete.
 - Semantic checking is a core subset; conversions require explicit checked mode and only basic static tensor shape equality is implemented. Numeric widening, tensor operations/broadcasting/device checks, exhaustive control-flow analysis, overloads, generics, module resolution, and complete diagnostics rendering remain.
-- Parser coverage is still a subset: complete newline rules, AST printer snapshot tests, and full grammar recovery remain. Range endpoint inclusivity and runtime iteration behavior are not defined because this front end does not execute programs.
+- Parser coverage is still a subset: complete newline rules, AST printer snapshots against the frozen v1 grammar, and full grammar recovery remain. Range endpoint inclusivity and runtime iteration behavior are not defined because this front end does not execute programs.
 - Typed HIR/verifier currently cover the existing language subset only; they need complete semantic coverage, stable function/type identities, deserialization, a compatibility policy, and conformance tests before an LLVM adapter is ready.
 
 ## Milestones
@@ -100,7 +100,7 @@ LLVM/backend work begins only after these front-end milestones are complete and 
 ## Latest verification
 
 - A fresh Release-mode out-of-tree CMake configure/build succeeded with GCC 13.3 in `/tmp/indicode-ast-json-build`.
-- All 16 CTest cases pass, including source-manager line/column tests, AST/typed-HIR JSON inspection, and the separately built installed-package consumer.
+- All 17 CTest cases pass, including source-manager line/column tests, AST-printer golden output, AST/typed-HIR JSON inspection, and the separately built installed-package consumer.
 - The suite also verifies nested `else if` return coverage, malformed HIR return-path rejection, invalid HIR parameter/call/return/symbol-scope invariants, UTF-8/tab diagnostic caret alignment, and float literal overflow/underflow rejection.
 - Lexer regression tests confirm that UTF-8 byte offsets and human-facing source columns remain distinct and consistent after tabs and non-ASCII string contents.
 - The verification build was kept outside the project; no generated build files were added to the repository.

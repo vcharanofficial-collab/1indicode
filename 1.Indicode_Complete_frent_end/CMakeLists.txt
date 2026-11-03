@@ -66,6 +66,10 @@ if(BUILD_TESTING)
     target_link_libraries(indicode_parser_tests PRIVATE indicode_frontend)
     add_test(NAME parser_tests COMMAND indicode_parser_tests)
 
+    add_executable(indicode_ast_printer_tests tests/ast_printer_tests.cpp)
+    target_link_libraries(indicode_ast_printer_tests PRIVATE indicode_frontend)
+    add_test(NAME ast_printer_tests COMMAND indicode_ast_printer_tests)
+
     add_executable(indicode_sema_tests tests/sema_tests.cpp)
     target_link_libraries(indicode_sema_tests PRIVATE indicode_frontend)
     add_test(NAME sema_tests COMMAND indicode_sema_tests)

@@ -8,7 +8,7 @@ We are building the part of a compiler that reads Indicode source code and check
 
 LLVM is a large, separate compiler framework. This project does **not** download, copy, or build LLVM. Our front end and its tests must keep working without LLVM. Connecting an optional backend is a later project stage, after the front end has a stable typed representation.
 
-The PDF is a blueprint, not a list of features already completed. Its 777 concepts are a long-term catalogue, not 777 built-in types or a promise to implement every idea immediately.
+The [front-end completion plan](../Compiler_Front_End_Remaining_Work.pdf) is the source of truth for remaining front-end work. The previous all-area blueprint's 777 concepts were not 777 front-end requirements; the front-end section contained 40 catalogue entries, of which the audit lists 10 implemented, 16 partial, and 14 not started.
 
 ## Current Overall Progress: 95%
 
@@ -27,7 +27,7 @@ The estimate uses the weighted acceptance areas in `PROGRESS.md`:
 - The source manager owns source buffers and maps byte offsets through indexed line tables, including CR/LF/CRLF, UTF-8 scalar columns, and tabs.
 - `indicode typed-json` emits verified HIR as JSON with a schema version and stable local binding IDs; deserialization and a compatibility policy are still future work.
 - `indicode ast-json` serializes parsed declarations and syntax nodes with source spans; golden snapshots and a compatibility policy remain future work.
-- Updated weighted estimate: **95.20%, rounded to 95%** (see `PROGRESS.md`).
+- Updated weighted estimate: **95.20%, rounded to 95%** (see `PROGRESS.md` and the [completion plan](../Compiler_Front_End_Remaining_Work.pdf)).
 
 This is an estimate, not a marketing score. It may go down if a review finds missing acceptance behavior. Passing tests prove only the tested cases, not completeness of the language.
 
@@ -156,7 +156,7 @@ The current grammar does not yet provide a type annotation syntax for an empty l
 ## What Must Happen Before LLVM Is Connected?
 
 1. Finish and version the front-end grammar and type/conversion rules.
-2. Expand lexer/parser/resolver/type-checker tests to cover valid and invalid examples from the PDF's v1 subset.
+2. Expand lexer/parser/resolver/type-checker tests to cover valid and invalid examples from the agreed v1 front-end contract.
 3. Make the typed HIR stable, independently verifiable, and documented.
 4. Keep source spans and diagnostics usable through lowering.
 5. Pass clean offline builds, the complete test suite, fuzz/sanitizer checks, and beginner examples.

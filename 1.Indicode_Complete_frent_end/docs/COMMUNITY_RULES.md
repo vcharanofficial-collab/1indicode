@@ -9,7 +9,7 @@ These rules protect the project's scope, build size, maintainability, and commun
 - This phase builds the Indicode language front end: source handling, lexer, parser, AST, name resolution, type checking, diagnostics, project-owned typed HIR, and verification.
 - Do not add machine-code generation, runtime execution, GPU/device backends, autodiff runtime, training systems, or unrelated product features to this front-end project.
 - Tensor types and statically knowable tensor shape checks belong to the planned front end; tensor execution and training do not.
-- Update the roadmap before expanding the agreed scope. A feature listed in the PDF is not automatically approved for the current milestone.
+- Update the roadmap and [front-end completion plan](../Compiler_Front_End_Remaining_Work.pdf) before expanding the agreed scope. A catalogued feature is not automatically approved for the current milestone.
 
 ## 2. LLVM Must Not Be Bundled
 
@@ -51,7 +51,7 @@ For every code change:
 - C++20 and the standard library are the default dependency baseline. Every additional required dependency needs a written reason, supported-version policy, license/security review, and a dependency-free path where practical.
 - Configure builds outside the source tree when possible, for example `cmake -S . -B /tmp/indicode-build`.
 - Never commit `build/`, `CMakeFiles/`, CMake caches, object files, executables, static/shared libraries, temporary logs, downloaded archives, or generated IR dumps unless a specific source-controlled fixture is reviewed and approved.
-- Keep ignore rules narrow and explicit. Do not remove source files, tests, the blueprint PDF, or user files during cleanup.
+- Keep ignore rules narrow and explicit. Do not remove source files, tests, the current front-end completion plan, or user files during cleanup.
 - The default build must be reproducible and must not download tools or dependencies.
 
 ## 6. Diagnostics, Safety, and Input Handling

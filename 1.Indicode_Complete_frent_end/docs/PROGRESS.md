@@ -14,7 +14,7 @@ This repository is a real, buildable, tested compiler-front-end prototype, but i
 
 **Overall front-end completion: 95%**
 
-The percentage measures progress toward the compiler front-end boundary described in the blueprint, not progress toward LLVM itself or the full compiler. It is a weighted estimate: each area's weight is fixed, and completion credit requires implemented, tested, documented acceptance behavior. Recent work adds an owning source manager with indexed line/column lookup plus schema-versioned AST JSON. The weighted estimate is now **95.20%, rounded to 95%**; these changes close specific infrastructure gaps but do not close the larger grammar, semantic, tooling, and conformance gaps.
+The percentage measures progress toward the agreed front-end-only boundary in the [completion plan](../Compiler_Front_End_Remaining_Work.pdf), not progress toward LLVM itself or the full compiler. It is a weighted estimate: each area's weight is fixed, and completion credit requires implemented, tested, documented acceptance behavior. Recent work adds an owning source manager with indexed line/column lookup plus schema-versioned AST JSON. The weighted estimate is now **95.20%, rounded to 95%**; these changes close specific infrastructure gaps but do not close the larger grammar, semantic, tooling, and conformance gaps.
 
 | Acceptance area | Weight | Area completion | Evidence / remaining work |
 | --- | --- | --- |

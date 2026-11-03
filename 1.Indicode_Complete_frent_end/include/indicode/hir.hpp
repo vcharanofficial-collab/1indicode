@@ -88,5 +88,6 @@ struct HirProgram {
 HirProgram lower_to_hir(const Program& program);
 std::vector<Diagnostic> verify_hir(const HirProgram& program);
 std::string print_hir(const HirProgram& program);
+std::string serialize_hir_json(const HirProgram& program);
 
 }

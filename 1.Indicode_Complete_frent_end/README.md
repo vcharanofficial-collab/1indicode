@@ -19,12 +19,15 @@ ctest --test-dir /tmp/indicode-build --output-on-failure
 /tmp/indicode-build/indicode tokens examples/hello.indi
 /tmp/indicode-build/indicode ast examples/hello.indi
 /tmp/indicode-build/indicode typed examples/hello.indi
+/tmp/indicode-build/indicode typed-json examples/records.indi
 /tmp/indicode-build/indicode check examples/records.indi
 /tmp/indicode-build/indicode check examples/tensor_shapes.indi
 /tmp/indicode-build/indicode --json-diagnostics check tests/fixtures/type_error.indi
 ```
 
 `--json-diagnostics` prints machine-readable errors for editor/CI tools. It is an option before the command and source path.
+
+`typed-json` prints verified project-owned HIR in a JSON envelope with `schemaVersion: 1`, including source spans and symbol IDs for a future backend adapter.
 
 See [docs/PROGRESS.md](docs/PROGRESS.md) for measured progress, [docs/ROADMAP_BEGINNER.md](docs/ROADMAP_BEGINNER.md) for the plain-language roadmap and current syntax examples, and [docs/COMMUNITY_RULES.md](docs/COMMUNITY_RULES.md) for strict contribution rules.
 

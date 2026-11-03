@@ -97,6 +97,57 @@ int main() {
     require(recoverable_result.diagnostics[0].fix_it.has_value() &&
                 recoverable_result.diagnostics[0].fix_it->replacement == ": ",
             "missing parameter separators should include a precise insertion fix-it");
+    const auto& fix_it = *recoverable_result.diagnostics[0].fix_it;
+    auto fixed_source_text = recoverable.contents;
+    fixed_source_text.replace(fix_it.span.start.offset,
+                              fix_it.span.end.offset - fix_it.span.start.offset,
+                              fix_it.replacement);
+    const indicode::SourceFile fixed_source{recoverable.name, fixed_source_text};
+    const auto fixed_lexed = indicode::Lexer(fixed_source).lex();
+    const auto fixed_parsed = indicode::Parser(fixed_lexed.tokens).parse();
+    require(fixed_lexed.diagnostics.empty() && fixed_parsed.diagnostics.empty(),
+            "applying the parser fix-it should produce valid syntax");
+
+    const indicode::SourceFile statement_recovery{
+        "statement_recovery.indi",
+        "function recover() {\n"
+        "  broken = 1 +\n"
+        "  retained = 2\n"
+        "  malformed = [1, ]\n"
+        "  final = retained + 1\n"
+        "}\n"
+        "after = 3\n"
+    };
+    const auto statement_recovery_lexed = indicode::Lexer(statement_recovery).lex();
+    const auto statement_recovery_result =
+        indicode::Parser(statement_recovery_lexed.tokens).parse();
+    require(statement_recovery_lexed.diagnostics.empty() &&
+                statement_recovery_result.diagnostics.size() == 2 &&
+                statement_recovery_result.program.functions.size() == 1 &&
+                statement_recovery_result.program.functions[0].body.size() == 3 &&
+                statement_recovery_result.program.functions[0].body[0]->name == "retained" &&
+                statement_recovery_result.program.functions[0].body[1]->name == "malformed" &&
+                statement_recovery_result.program.functions[0].body[2]->name == "final" &&
+                statement_recovery_result.program.statements.size() == 1 &&
+                statement_recovery_result.program.statements[0]->name == "after",
+            "statement-level synchronization should report both syntax errors and retain later statements/declarations");
+
+    const indicode::SourceFile expression_recovery{
+        "expression_recovery.indi",
+        "broken = combine(, 2, )\n"
+        "survivor = 3\n"
+    };
+    const auto expression_recovery_lexed = indicode::Lexer(expression_recovery).lex();
+    const auto expression_recovery_result =
+        indicode::Parser(expression_recovery_lexed.tokens).parse();
+    require(expression_recovery_lexed.diagnostics.empty() &&
+                expression_recovery_result.diagnostics.size() == 2 &&
+                expression_recovery_result.program.statements.size() == 2 &&
+                expression_recovery_result.program.statements[0]->expression->kind ==
+                    indicode::ExprKind::Call &&
+                expression_recovery_result.program.statements[0]->expression->arguments.size() == 1 &&
+                expression_recovery_result.program.statements[1]->name == "survivor",
+            "expression synchronization should retain valid sibling arguments and following statements");
 
     const std::vector<indicode::Token> empty_tokens;
     const auto empty_result = indicode::Parser(empty_tokens).parse();

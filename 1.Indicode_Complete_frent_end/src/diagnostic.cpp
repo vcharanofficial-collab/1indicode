@@ -121,6 +121,10 @@ std::string format_diagnostic_text(const SourceManager& sources, SourceId source
             output << " (insert `" << diagnostic.fix_it->replacement << '`' << ')';
         }
     }
+    for (const auto& note : diagnostic.notes) {
+        output << "\n  " << source.name << ':' << note.span.start.line << ':'
+               << note.span.start.column << ": note: " << note.message;
+    }
     return output.str();
 }
 
@@ -133,7 +137,7 @@ std::string format_diagnostic_text(const SourceFile& source, const Diagnostic& d
 std::string format_diagnostics_json(const SourceFile& source,
                                     const std::vector<Diagnostic>& diagnostics) {
     std::ostringstream output;
-    output << '[';
+    output << "{\"schemaVersion\":1,\"diagnostics\":[";
     for (std::size_t index = 0; index < diagnostics.size(); ++index) {
         if (index != 0) {
             output << ',';
@@ -161,9 +165,21 @@ std::string format_diagnostics_json(const SourceFile& source,
         } else {
             output << "null";
         }
-        output << '}';
+        output << ",\"notes\":[";
+        for (std::size_t note_index = 0; note_index < diagnostic.notes.size(); ++note_index) {
+            if (note_index != 0) output << ',';
+            const auto& note = diagnostic.notes[note_index];
+            output << "{\"message\":\"" << json_escape(note.message)
+                   << "\",\"start\":{\"offset\":" << note.span.start.offset
+                   << ",\"line\":" << note.span.start.line
+                   << ",\"column\":" << note.span.start.column
+                   << "},\"end\":{\"offset\":" << note.span.end.offset
+                   << ",\"line\":" << note.span.end.line
+                   << ",\"column\":" << note.span.end.column << "}}";
+        }
+        output << "]}";
     }
-    output << ']';
+    output << "]}";
     return output.str();
 }
 

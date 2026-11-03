@@ -34,6 +34,10 @@ int main() {
         "repeat 2 times { log(call) }\n"
         "for value in 0..3 { log(value) }\n"
         "log(!false && true || false)\n"
+        "prefixes = +1 + ~2\n"
+        "arithmetic = 6 / 2 % 2 * 1\n"
+        "equality = 1 == 2 != 3\n"
+        "ordering = 1 < 2 <= 3 > 2 >= 1\n"
     };
     const auto lexed = indicode::Lexer(source).lex();
     const auto parsed = indicode::Parser(lexed.tokens).parse();
@@ -65,7 +69,11 @@ int main() {
         "  Call(log Name(call))\n"
         "for value in Range(Literal(0) .. Literal(3))\n"
         "  Call(log Name(value))\n"
-        "Call(log Binary(|| Binary(&& Unary(! Literal(false)) Literal(true)) Literal(false)))\n";
+        "Call(log Binary(|| Binary(&& Unary(! Literal(false)) Literal(true)) Literal(false)))\n"
+        "prefixes = Binary(+ Unary(+ Literal(1)) Unary(~ Literal(2)))\n"
+        "arithmetic = Binary(* Binary(% Binary(/ Literal(6) Literal(2)) Literal(2)) Literal(1))\n"
+        "equality = Binary(!= Binary(== Literal(1) Literal(2)) Literal(3))\n"
+        "ordering = Binary(>= Binary(> Binary(<= Binary(< Literal(1) Literal(2)) Literal(3)) Literal(2)) Literal(1))\n";
     const auto output = indicode::print_program(parsed.program);
     if (output != expected) {
         std::cerr << "Expected AST output:\n" << expected << "Actual AST output:\n" << output;

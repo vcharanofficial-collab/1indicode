@@ -1,9 +1,13 @@
 #include "indicode/lexer.hpp"
 #include "indicode/parser.hpp"
+#include "indicode/const_eval.hpp"
 #include "indicode/sema.hpp"
 
+#include <algorithm>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
+#include <string>
 
 namespace {
 
@@ -51,6 +55,7 @@ int main() {
         "doubleValue = to_Double(1e40, checked: true)\n"
         "for index in 0..10 { say(index) }\n"
         "say(\"ok\")\n"
+        "sameTruth = true == false\n"
     };
     auto valid_program = parse_source(valid);
     const auto valid_result = indicode::Analyzer().analyze(valid_program);
@@ -125,6 +130,27 @@ int main() {
     require(indicode::Analyzer().analyze(else_if_program).diagnostics.empty(),
             "nested else-if branches that all return should satisfy return-path analysis");
 
+    const indicode::SourceFile flow_source{
+        "flow.indi",
+        "function returns_all(value: Bool) -> Int {\n"
+        "  if value { return 1 } else { return 2 }\n"
+        "  unreachable = 3\n"
+        "}\n"
+        "function loop_is_not_a_return(value: Bool) -> Int {\n"
+        "  while value { return 1 }\n"
+        "}\n"
+    };
+    auto flow_program = parse_source(flow_source);
+    const auto flow_result = indicode::Analyzer().analyze(flow_program);
+    bool saw_unreachable = false;
+    bool saw_missing_loop_return = false;
+    for (const auto& diagnostic : flow_result.diagnostics) {
+        saw_unreachable = saw_unreachable || diagnostic.code == "E-SEMA-050";
+        saw_missing_loop_return = saw_missing_loop_return || diagnostic.code == "E-SEMA-011";
+    }
+    require(saw_unreachable && saw_missing_loop_return,
+            "control-flow analysis should reject unreachable statements and not assume loops execute");
+
     const indicode::SourceFile records_source{
         "records.indi",
         "record Point { x: Int, y: Int }\n"
@@ -158,6 +184,7 @@ int main() {
         "float_literal_underflow = 1e-9999\n"
         "fractional_integer = to_Int2(2.5, checked: true)\n"
         "mixed_range = 1..2.0\n"
+        "same_point = point == point\n"
     };
     auto invalid_records_program = parse_source(invalid_records_source);
     const auto invalid_records_result = indicode::Analyzer().analyze(invalid_records_program);
@@ -168,6 +195,7 @@ int main() {
     bool saw_conversion_range_error = false;
     std::size_t floating_literal_range_errors = 0;
     bool saw_invalid_range = false;
+    bool saw_invalid_record_comparison = false;
     std::size_t conversion_range_errors = 0;
     for (const auto& diagnostic : invalid_records_result.diagnostics) {
         saw_field_type_error = saw_field_type_error || diagnostic.code == "E-SEMA-041";
@@ -180,6 +208,9 @@ int main() {
             ++floating_literal_range_errors;
         }
         saw_invalid_range = saw_invalid_range || diagnostic.code == "E-SEMA-045";
+        saw_invalid_record_comparison = saw_invalid_record_comparison ||
+            (diagnostic.code == "E-SEMA-016" &&
+             diagnostic.message == "comparison operands have incompatible types");
         if (diagnostic.code == "E-SEMA-022") ++conversion_range_errors;
     }
     require(saw_field_type_error && saw_missing_field && saw_non_record_access &&
@@ -189,7 +220,125 @@ int main() {
             "integer and floating conversion constants outside the target range should be diagnosed");
     require(floating_literal_range_errors == 2,
             "floating literals that overflow or underflow the supported range should be rejected");
-    require(saw_invalid_range, "range bounds with mismatched numeric types should be rejected");
+    require(saw_invalid_range && saw_invalid_record_comparison,
+            "range mismatches and unsupported record equality should be rejected");
+
+    const indicode::SourceFile constants_source{
+        "constants.indi",
+        "folded = 1 + 2 * 3\n"
+        "overflow = 2147483647 + 1\n"
+        "division = 12 / 0\n"
+        "converted = to_Int2(30000 + 10000, checked: true)\n"
+        "void_output = say(say(1))\n"
+    };
+    auto constants_program = parse_source(constants_source);
+    auto folded = indicode::evaluate_constant_expression(
+        *constants_program.statements[0]->expression);
+    require(folded.value && std::get<std::int64_t>(*folded.value) == 7,
+            "constant evaluator should honor arithmetic precedence");
+    std::string over_budget_source_text = "over_budget = 1";
+    for (std::size_t index = 0; index < 130; ++index) {
+        over_budget_source_text += " + 1";
+    }
+    const indicode::SourceFile over_budget_source{
+        "over_budget.indi", std::move(over_budget_source_text)
+    };
+    auto over_budget_program = parse_source(over_budget_source);
+    const auto limited = indicode::evaluate_constant_expression(
+        *over_budget_program.statements[0]->expression);
+    require(limited.error == indicode::ConstantEvaluationError::StepLimit,
+            "constant evaluator should enforce its deterministic step budget");
+    const auto division_result = indicode::evaluate_constant_expression(
+        *constants_program.statements[2]->expression);
+    require(division_result.error == indicode::ConstantEvaluationError::DivisionByZero,
+            "constant evaluator should distinguish division by zero");
+    const auto constants_result = indicode::Analyzer().analyze(constants_program);
+    bool saw_integer_overflow = false;
+    bool saw_division_by_zero = false;
+    bool saw_constant_conversion_range = false;
+    for (const auto& diagnostic : constants_result.diagnostics) {
+        saw_integer_overflow = saw_integer_overflow || diagnostic.code == "E-SEMA-022";
+        saw_division_by_zero = saw_division_by_zero ||
+            (diagnostic.code == "E-SEMA-051" &&
+             diagnostic.message == "constant expression divides by zero");
+        saw_constant_conversion_range = saw_constant_conversion_range ||
+            (diagnostic.code == "E-SEMA-022" &&
+             diagnostic.message == "integer literal is outside the conversion target range");
+    }
+    require(saw_integer_overflow && saw_division_by_zero && saw_constant_conversion_range,
+            "semantic analysis should reject overflowing and zero-dividing constant expressions");
+    require(std::any_of(constants_result.diagnostics.begin(),
+                        constants_result.diagnostics.end(),
+                        [](const indicode::Diagnostic& diagnostic) {
+                            return diagnostic.code == "E-SEMA-017";
+                        }),
+            "the output builtin should reject a Void expression as its value");
+    const indicode::SourceFile short_circuit_source{
+        "short_circuit.indi",
+        "result = false && (1 / 0 == 0)\n"
+    };
+    auto short_circuit_program = parse_source(short_circuit_source);
+    const auto short_circuit = indicode::evaluate_constant_expression(
+        *short_circuit_program.statements[0]->expression);
+    require(short_circuit.value && std::get<bool>(*short_circuit.value) == false,
+            "constant Boolean operators should short-circuit their unused operand");
+    const indicode::SourceFile integer_boundaries_source{
+        "integer_boundaries.indi",
+        "minimum = -9223372036854775808\n"
+        "overflow = 9223372036854775807 + 1\n"
+    };
+    auto integer_boundaries_program = parse_source(integer_boundaries_source);
+    const auto minimum = indicode::evaluate_constant_expression(
+        *integer_boundaries_program.statements[0]->expression);
+    const auto signed_overflow = indicode::evaluate_constant_expression(
+        *integer_boundaries_program.statements[1]->expression);
+    require(minimum.value &&
+                std::get<std::int64_t>(*minimum.value) == std::numeric_limits<std::int64_t>::min() &&
+                signed_overflow.error == indicode::ConstantEvaluationError::Overflow,
+            "constant evaluator should handle the signed minimum and detect signed overflow");
+
+    const indicode::SourceFile duplicate_source{
+        "duplicate.indi",
+        "let item: Int = 1\nvar item = 2\n"
+    };
+    auto duplicate_program = parse_source(duplicate_source);
+    const auto duplicate_result = indicode::Analyzer().analyze(duplicate_program);
+    require(duplicate_result.diagnostics.size() == 1 &&
+                duplicate_result.diagnostics[0].code == "E-SEMA-004" &&
+                duplicate_result.diagnostics[0].notes.size() == 1 &&
+                duplicate_result.diagnostics[0].notes[0].span.start.line == 1,
+            "duplicate binding diagnostics should point to the earlier declaration");
+
+    const indicode::SourceFile namespace_source{
+        "namespaces.indi",
+        "record Item { value: Int }\n"
+        "function identity(value: Item) -> Item { return value }\n"
+        "Item = Item(value: 1)\n"
+        "function identity(value: Int) -> Int { return value }\n"
+    };
+    auto namespace_program = parse_source(namespace_source);
+    const auto namespace_result = indicode::Analyzer().analyze(namespace_program);
+    require(namespace_result.diagnostics.size() == 1 &&
+                namespace_result.diagnostics[0].code == "E-SEMA-001" &&
+                namespace_result.diagnostics[0].notes.size() == 1 &&
+                namespace_result.diagnostics[0].notes[0].span.start.line == 2 &&
+                namespace_program.statements[0]->declared_type == "Item",
+            "type and value namespaces should remain separate while duplicate functions cite the prior declaration");
+
+    const indicode::SourceFile void_value_source{
+        "void_value.indi",
+        "Void invalid_value = say(\"no value\")\n"
+        "function invalid_parameter(value: Void) {}\n"
+    };
+    auto void_value_program = parse_source(void_value_source);
+    const auto void_value_result = indicode::Analyzer().analyze(void_value_program);
+    require(void_value_result.diagnostics.size() == 2 &&
+                std::all_of(void_value_result.diagnostics.begin(),
+                            void_value_result.diagnostics.end(),
+                            [](const indicode::Diagnostic& diagnostic) {
+                                return diagnostic.code == "E-SEMA-002";
+                            }),
+            "Void must not be used as a variable or parameter type");
 
     const indicode::SourceFile tensor_source{
         "tensor.indi",
@@ -203,6 +352,25 @@ int main() {
     require(tensor_result.diagnostics.size() == 1 &&
                 tensor_result.diagnostics[0].code == "E-SEMA-008",
             "tensor return checking should reject statically incompatible dimensions");
+
+    const indicode::SourceFile tensor_mismatches{
+        "tensor_mismatches.indi",
+        "function rank(input: Tensor<Float, [Batch, 3]>) -> Tensor<Float, [Batch]> "
+        "{ return input }\n"
+        "function element(input: Tensor<Float, [4]>) -> Tensor<Int, [4]> { return input }\n"
+        "function symbol(input: Tensor<Float, [Batch, 3]>) -> Tensor<Float, [Other, 3]> "
+        "{ return input }\n"
+    };
+    auto tensor_mismatch_program = parse_source(tensor_mismatches);
+    const auto tensor_mismatch_result =
+        indicode::Analyzer().analyze(tensor_mismatch_program);
+    require(tensor_mismatch_result.diagnostics.size() == 3 &&
+                std::all_of(tensor_mismatch_result.diagnostics.begin(),
+                            tensor_mismatch_result.diagnostics.end(),
+                            [](const indicode::Diagnostic& diagnostic) {
+                                return diagnostic.code == "E-SEMA-008";
+                            }),
+            "tensor checking should reject rank, element-type, and symbolic-dimension mismatches");
 
     std::cout << "Semantic tests passed\n";
 }

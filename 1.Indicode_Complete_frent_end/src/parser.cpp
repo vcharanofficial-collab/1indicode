@@ -119,14 +119,33 @@ void Parser::skip_separators() {
 }
 
 void Parser::synchronize() {
+    std::size_t parenthesis_depth = 0;
+    std::size_t bracket_depth = 0;
     while (!at_end() && !check(TokenKind::RightBrace)) {
-        if (previous().kind == TokenKind::Newline || previous().kind == TokenKind::Semicolon) {
-            return;
+        if (parenthesis_depth == 0 && bracket_depth == 0) {
+            if (previous().kind == TokenKind::Newline ||
+                previous().kind == TokenKind::Semicolon) {
+                return;
+            }
+            if (check_keyword("function") || check_keyword("record") ||
+                check_keyword("if") || check_keyword("return") ||
+                check_keyword("let") || check_keyword("var") ||
+                check_keyword("while") || check_keyword("repeat") ||
+                check_keyword("for")) {
+                return;
+            }
         }
-        if (check_keyword("function") || check_keyword("if") || check_keyword("return")) {
-            return;
+        if (match(TokenKind::LeftParen)) {
+            ++parenthesis_depth;
+        } else if (match(TokenKind::RightParen)) {
+            if (parenthesis_depth > 0) --parenthesis_depth;
+        } else if (match(TokenKind::LeftBracket)) {
+            ++bracket_depth;
+        } else if (match(TokenKind::RightBracket)) {
+            if (bracket_depth > 0) --bracket_depth;
+        } else {
+            advance();
         }
-        advance();
     }
 }
 
@@ -152,6 +171,30 @@ void Parser::synchronize_declaration() {
             continue;
         }
         advance();
+    }
+}
+
+void Parser::synchronize_expression(TokenKind closing) {
+    std::size_t parenthesis_depth = 0;
+    std::size_t bracket_depth = 0;
+    while (!at_end()) {
+        if (parenthesis_depth == 0 && bracket_depth == 0 &&
+            (check(closing) || check(TokenKind::Comma) || check(TokenKind::Newline) ||
+             check(TokenKind::Semicolon) || check(TokenKind::RightBrace) ||
+             check(TokenKind::RightParen) || check(TokenKind::RightBracket))) {
+            return;
+        }
+        if (match(TokenKind::LeftParen)) {
+            ++parenthesis_depth;
+        } else if (match(TokenKind::RightParen)) {
+            if (parenthesis_depth > 0) --parenthesis_depth;
+        } else if (match(TokenKind::LeftBracket)) {
+            ++bracket_depth;
+        } else if (match(TokenKind::RightBracket)) {
+            if (bracket_depth > 0) --bracket_depth;
+        } else {
+            advance();
+        }
     }
 }
 
@@ -594,13 +637,16 @@ std::unique_ptr<Expr> Parser::primary() {
         result->kind = ExprKind::ListLiteral;
         const auto start = previous().span.start;
         if (!check(TokenKind::RightBracket)) {
-            do {
+            while (true) {
                 auto element = expression();
                 if (!element) {
-                    return nullptr;
+                    synchronize_expression(TokenKind::RightBracket);
+                    if (match(TokenKind::Comma)) continue;
+                    break;
                 }
                 result->arguments.push_back(std::move(element));
-            } while (match(TokenKind::Comma));
+                if (!match(TokenKind::Comma)) break;
+            }
         }
         const auto* closing = consume(TokenKind::RightBracket, "expected ']' after list elements");
         if (closing == nullptr) {
@@ -633,6 +679,10 @@ std::unique_ptr<Expr> Parser::finish_postfix(std::unique_ptr<Expr> expression) {
         } else if (match(TokenKind::LeftBracket)) {
             auto index = this->expression();
             if (!index) {
+                synchronize_expression(TokenKind::RightBracket);
+                if (consume(TokenKind::RightBracket, "expected ']' after index") == nullptr) {
+                    return nullptr;
+                }
                 return nullptr;
             }
             const auto* closing = consume(TokenKind::RightBracket, "expected ']' after index");
@@ -669,7 +719,7 @@ std::unique_ptr<Expr> Parser::finish_call(std::unique_ptr<Expr> callee) {
     result->value = callee->value;
     bool saw_named_argument = false;
     if (!check(TokenKind::RightParen)) {
-        do {
+        while (true) {
             std::string argument_name;
             if (check(TokenKind::Identifier) && check_next(TokenKind::Colon)) {
                 saw_named_argument = true;
@@ -677,15 +727,19 @@ std::unique_ptr<Expr> Parser::finish_call(std::unique_ptr<Expr> callee) {
                 advance();
             } else if (saw_named_argument) {
                 error(peek(), "positional arguments cannot follow named arguments");
-                return nullptr;
+                synchronize_expression(TokenKind::RightParen);
+                break;
             }
             auto argument = expression();
             if (!argument) {
-                return nullptr;
+                synchronize_expression(TokenKind::RightParen);
+                if (match(TokenKind::Comma)) continue;
+                break;
             }
             result->arguments.push_back(std::move(argument));
             result->argument_names.push_back(std::move(argument_name));
-        } while (match(TokenKind::Comma));
+            if (!match(TokenKind::Comma)) break;
+        }
     }
     const auto* closing = consume(TokenKind::RightParen, "expected ')' after arguments");
     if (closing == nullptr) {

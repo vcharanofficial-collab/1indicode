@@ -28,6 +28,7 @@ struct Expr {
     std::string inferred_type;
     std::string resolved_symbol;
     std::uint64_t resolved_symbol_id = 0;
+    std::uint64_t resolved_type_symbol_id = 0;
     std::unique_ptr<Expr> left;
     std::unique_ptr<Expr> right;
     std::vector<std::unique_ptr<Expr>> arguments;
@@ -51,6 +52,7 @@ struct Stmt {
     std::string name;
     std::string declared_type;
     std::uint64_t resolved_symbol_id = 0;
+    std::uint64_t resolved_type_symbol_id = 0;
     bool mutable_binding = true;
     std::unique_ptr<Expr> expression;
     std::vector<std::unique_ptr<Stmt>> body;
@@ -62,12 +64,15 @@ struct Parameter {
     std::string type;
     SourceSpan span;
     std::uint64_t resolved_symbol_id = 0;
+    std::uint64_t resolved_type_symbol_id = 0;
 };
 
 struct FunctionDecl {
     std::string name;
+    std::uint64_t symbol_id = 0;
     std::vector<Parameter> parameters;
     std::string return_type;
+    std::uint64_t return_type_symbol_id = 0;
     SourceSpan span;
     std::vector<std::unique_ptr<Stmt>> body;
 };
@@ -76,10 +81,13 @@ struct RecordField {
     std::string name;
     std::string type;
     SourceSpan span;
+    std::uint64_t type_symbol_id = 0;
+    std::uint64_t symbol_id = 0;
 };
 
 struct RecordDecl {
     std::string name;
+    std::uint64_t symbol_id = 0;
     std::vector<RecordField> fields;
     SourceSpan span;
 };

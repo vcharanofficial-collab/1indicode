@@ -40,13 +40,57 @@ int main() {
     require(hir.functions.size() == 1 && hir.statements.size() == 5,
             "lowering should preserve function and top-level statement structure");
     require(indicode::verify_hir(hir).empty(), "lowered typed HIR should verify");
+    auto void_say_argument_hir = indicode::lower_to_hir(parsed.program);
+    auto nested_say = std::make_unique<indicode::HirExpr>();
+    nested_say->kind = indicode::HirExprKind::Call;
+    nested_say->type = "Void";
+    nested_say->symbol = "say";
+    nested_say->symbol_id = 0x200001ULL;
+    nested_say->argument_names = {""};
+    auto nested_argument = std::make_unique<indicode::HirExpr>();
+    nested_argument->kind = indicode::HirExprKind::Literal;
+    nested_argument->type = "Int";
+    nested_argument->value = "1";
+    nested_say->arguments.push_back(std::move(nested_argument));
+    void_say_argument_hir.statements[4]->body[0]->expression->arguments[0] =
+        std::move(nested_say);
+    const auto void_say_diagnostics = indicode::verify_hir(void_say_argument_hir);
+    require(std::any_of(void_say_diagnostics.begin(), void_say_diagnostics.end(),
+                        [](const indicode::Diagnostic& diagnostic) {
+                            return diagnostic.code == "E-HIR-010";
+                        }),
+            "HIR verifier should reject Void as the value passed to say");
+    require(hir.functions[0].symbol_id != 0 &&
+                hir.functions[0].return_type_symbol_id != 0 &&
+                hir.functions[0].parameters[0].type_symbol_id != 0 &&
+                hir.statements[3]->expression->symbol_id == hir.functions[0].symbol_id,
+            "functions, call references, parameter types, and return types should have stable identities");
+    auto invalid_bool_equality_hir = indicode::lower_to_hir(parsed.program);
+    auto bool_equality = std::make_unique<indicode::HirExpr>();
+    bool_equality->kind = indicode::HirExprKind::Binary;
+    bool_equality->type = "Bool";
+    bool_equality->value = "==";
+    bool_equality->left = std::make_unique<indicode::HirExpr>();
+    bool_equality->left->kind = indicode::HirExprKind::Literal;
+    bool_equality->left->type = "Bool";
+    bool_equality->left->value = "true";
+    bool_equality->right = std::make_unique<indicode::HirExpr>();
+    bool_equality->right->kind = indicode::HirExprKind::Literal;
+    bool_equality->right->type = "Bool";
+    bool_equality->right->value = "false";
+    invalid_bool_equality_hir.statements.push_back(std::make_unique<indicode::HirStmt>());
+    invalid_bool_equality_hir.statements.back()->kind = indicode::HirStmtKind::Expression;
+    invalid_bool_equality_hir.statements.back()->expression = std::move(bool_equality);
+    require(indicode::verify_hir(invalid_bool_equality_hir).empty(),
+            "HIR equality rules should agree with semantic typing for Bool values");
     const auto printed = indicode::print_hir(hir);
     require(printed.find("func @add") != std::string::npos &&
                 printed.find("call @add") != std::string::npos &&
                 printed.find("b: ") != std::string::npos &&
                 printed.find("list<List<Int>>") != std::string::npos &&
                 printed.find("for %item#") != std::string::npos &&
-                printed.find("func @add(%a#") != std::string::npos,
+                printed.find("func @add#") != std::string::npos &&
+                printed.find("%a#") != std::string::npos,
             "typed HIR printer should show stable symbol IDs with functions, collections, loops, and types");
 
     auto missing_return_hir = indicode::lower_to_hir(parsed.program);
@@ -70,6 +114,15 @@ int main() {
     require(std::any_of(misaligned_call_diagnostics.begin(), misaligned_call_diagnostics.end(),
                         [](const auto& diagnostic) { return diagnostic.code == "E-HIR-031"; }),
             "HIR verifier should reject call metadata that does not align with arguments");
+
+    auto incorrect_function_identity_hir = indicode::lower_to_hir(parsed.program);
+    incorrect_function_identity_hir.statements[3]->expression->symbol_id++;
+    const auto incorrect_function_identity_diagnostics =
+        indicode::verify_hir(incorrect_function_identity_hir);
+    require(std::any_of(incorrect_function_identity_diagnostics.begin(),
+                        incorrect_function_identity_diagnostics.end(),
+                        [](const auto& diagnostic) { return diagnostic.code == "E-HIR-042"; }),
+            "HIR verifier should reject function calls with mismatched symbol identities");
 
     auto top_level_return_hir = indicode::lower_to_hir(parsed.program);
     auto top_level_return = std::make_unique<indicode::HirStmt>();
@@ -139,6 +192,30 @@ int main() {
     const auto records_hir = indicode::lower_to_hir(records_parsed.program);
     require(records_hir.records.size() == 1 && indicode::verify_hir(records_hir).empty(),
             "typed HIR should preserve and verify record declarations and access");
+    require(records_hir.records[0].symbol_id != 0 &&
+                records_hir.records[0].fields[0].type_symbol_id != 0 &&
+                records_hir.records[0].fields[0].symbol_id != 0 &&
+                records_hir.statements[0]->expression->symbol_id ==
+                    records_hir.records[0].symbol_id &&
+                records_hir.statements[1]->expression->symbol_id ==
+                    records_hir.records[0].fields[0].symbol_id,
+            "record types, fields, constructor and member references should retain stable identities");
+    auto incorrect_record_identity_hir = indicode::lower_to_hir(records_parsed.program);
+    incorrect_record_identity_hir.statements[0]->expression->symbol_id++;
+    const auto incorrect_record_identity_diagnostics =
+        indicode::verify_hir(incorrect_record_identity_hir);
+    require(std::any_of(incorrect_record_identity_diagnostics.begin(),
+                        incorrect_record_identity_diagnostics.end(),
+                        [](const auto& diagnostic) { return diagnostic.code == "E-HIR-041"; }),
+            "HIR verifier should reject record constructors with mismatched symbol identities");
+    auto incorrect_field_identity_hir = indicode::lower_to_hir(records_parsed.program);
+    incorrect_field_identity_hir.statements[1]->expression->symbol_id++;
+    const auto incorrect_field_identity_diagnostics =
+        indicode::verify_hir(incorrect_field_identity_hir);
+    require(std::any_of(incorrect_field_identity_diagnostics.begin(),
+                        incorrect_field_identity_diagnostics.end(),
+                        [](const auto& diagnostic) { return diagnostic.code == "E-HIR-046"; }),
+            "HIR verifier should reject member references with mismatched field identities");
     const auto records_printed = indicode::print_hir(records_hir);
     require(records_printed.find("record @Point") != std::string::npos &&
                 records_printed.find(".x : Int") != std::string::npos &&

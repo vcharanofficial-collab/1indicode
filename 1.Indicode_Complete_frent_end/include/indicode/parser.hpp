@@ -42,6 +42,7 @@ private:
     void skip_separators();
     void synchronize();
     void synchronize_declaration();
+    void synchronize_expression(TokenKind closing);
     void declaration();
     std::string parse_type();
     bool record_declaration();

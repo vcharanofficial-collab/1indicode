@@ -17,6 +17,7 @@ add_library(indicode_frontend
     src/ast_json.cpp
     src/hir.cpp
     src/diagnostic.cpp
+    src/const_eval.cpp
 )
 target_include_directories(indicode_frontend PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

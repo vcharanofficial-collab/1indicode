@@ -87,6 +87,7 @@ std::string serialize_ast_json(const Program& program) {
                << ",\"inferredType\":" << quote_json(expression.inferred_type)
                << ",\"resolvedSymbol\":" << quote_json(expression.resolved_symbol)
                << ",\"resolvedSymbolId\":" << expression.resolved_symbol_id
+               << ",\"resolvedTypeSymbolId\":" << expression.resolved_type_symbol_id
                << ",\"left\":";
         if (expression.left) write_expression(*expression.left);
         else output << "null";
@@ -118,6 +119,7 @@ std::string serialize_ast_json(const Program& program) {
             output << ",\"name\":" << quote_json(statement.name)
                    << ",\"declaredType\":" << quote_json(statement.declared_type)
                    << ",\"resolvedSymbolId\":" << statement.resolved_symbol_id
+                   << ",\"resolvedTypeSymbolId\":" << statement.resolved_type_symbol_id
                    << ",\"mutable\":" << (statement.mutable_binding ? "true" : "false")
                    << ",\"expression\":";
             if (statement.expression) write_expression(*statement.expression);
@@ -135,14 +137,17 @@ std::string serialize_ast_json(const Program& program) {
     for (std::size_t index = 0; index < program.records.size(); ++index) {
         if (index != 0) output << ',';
         const auto& record = program.records[index];
-        output << "{\"name\":" << quote_json(record.name) << ",\"span\":";
+        output << "{\"name\":" << quote_json(record.name)
+               << ",\"symbolId\":" << record.symbol_id << ",\"span\":";
         write_span(output, record.span);
         output << ",\"fields\":[";
         for (std::size_t field_index = 0; field_index < record.fields.size(); ++field_index) {
             if (field_index != 0) output << ',';
             const auto& field = record.fields[field_index];
             output << "{\"name\":" << quote_json(field.name)
-                   << ",\"type\":" << quote_json(field.type) << ",\"span\":";
+                   << ",\"type\":" << quote_json(field.type)
+                   << ",\"typeSymbolId\":" << field.type_symbol_id
+                   << ",\"symbolId\":" << field.symbol_id << ",\"span\":";
             write_span(output, field.span);
             output << '}';
         }
@@ -154,7 +159,9 @@ std::string serialize_ast_json(const Program& program) {
         if (index != 0) output << ',';
         const auto& function = program.functions[index];
         output << "{\"name\":" << quote_json(function.name)
+               << ",\"symbolId\":" << function.symbol_id
                << ",\"returnType\":" << quote_json(function.return_type)
+               << ",\"returnTypeSymbolId\":" << function.return_type_symbol_id
                << ",\"span\":";
         write_span(output, function.span);
         output << ",\"parameters\":[";
@@ -163,7 +170,8 @@ std::string serialize_ast_json(const Program& program) {
             if (parameter_index != 0) output << ',';
             const auto& parameter = function.parameters[parameter_index];
             output << "{\"name\":" << quote_json(parameter.name)
-                   << ",\"type\":" << quote_json(parameter.type) << ",\"span\":";
+                   << ",\"type\":" << quote_json(parameter.type)
+                   << ",\"typeSymbolId\":" << parameter.resolved_type_symbol_id << ",\"span\":";
             write_span(output, parameter.span);
             output << ",\"resolvedSymbolId\":" << parameter.resolved_symbol_id << '}';
         }

@@ -1,4 +1,5 @@
 #include "indicode/sema.hpp"
+#include "indicode/const_eval.hpp"
 
 #include <charconv>
 #include <cmath>
@@ -11,6 +12,34 @@ namespace indicode {
 namespace {
 
 constexpr const char* error_type = "<error>";
+
+std::uint64_t builtin_type_symbol_id(const std::string& type) {
+    static const std::unordered_map<std::string, std::uint64_t> ids{
+        {"Bool", 0x100001ULL}, {"Byte", 0x100002ULL},
+        {"U8", 0x100003ULL}, {"Int2", 0x100004ULL},
+        {"UInt2", 0x100005ULL}, {"Int", 0x100006ULL},
+        {"UInt", 0x100007ULL}, {"Long", 0x100008ULL},
+        {"ULong", 0x100009ULL}, {"Half", 0x10000aULL},
+        {"Float", 0x10000bULL}, {"Double", 0x10000cULL},
+        {"Char", 0x10000dULL}, {"Text", 0x10000eULL},
+        {"Void", 0x10000fULL}
+    };
+    const auto found = ids.find(type);
+    return found == ids.end() ? 0 : found->second;
+}
+
+std::uint64_t builtin_function_symbol_id(const std::string& name) {
+    static const std::unordered_map<std::string, std::uint64_t> ids{
+        {"say", 0x200001ULL}, {"to_Byte", 0x200002ULL},
+        {"to_U8", 0x200003ULL}, {"to_Int2", 0x200004ULL},
+        {"to_UInt2", 0x200005ULL}, {"to_Int", 0x200006ULL},
+        {"to_UInt", 0x200007ULL}, {"to_Long", 0x200008ULL},
+        {"to_ULong", 0x200009ULL}, {"to_Half", 0x20000aULL},
+        {"to_Float", 0x20000bULL}, {"to_Double", 0x20000cULL}
+    };
+    const auto found = ids.find(name);
+    return found == ids.end() ? 0 : found->second;
+}
 
 bool is_integer_type(const std::string& type) {
     return type == "Byte" || type == "U8" || type == "Int2" || type == "UInt2" ||
@@ -68,9 +97,8 @@ bool is_integer_literal_expression(const Expr& expression) {
         return !expression.value.empty() && expression.value.front() >= '0' &&
                expression.value.front() <= '9';
     }
-    return expression.kind == ExprKind::Unary && expression.value == "-" && expression.left &&
-           expression.left->kind == ExprKind::Literal && !expression.left->value.empty() &&
-           expression.left->value.front() >= '0' && expression.left->value.front() <= '9';
+    const auto result = evaluate_constant_expression(expression);
+    return result.value && std::holds_alternative<std::int64_t>(*result.value);
 }
 
 std::string numeric_conversion_target(const std::string& name) {
@@ -85,6 +113,15 @@ std::string numeric_conversion_target(const std::string& name) {
 }
 
 bool numeric_literal_value(const Expr& expression, long double& value) {
+    if (expression.kind == ExprKind::Binary ||
+        (expression.kind == ExprKind::Unary && expression.value != "-")) {
+        const auto result = evaluate_constant_expression(expression);
+        if (!result.value) return false;
+        const auto* integer = std::get_if<std::int64_t>(&*result.value);
+        if (integer == nullptr) return false;
+        value = static_cast<long double>(*integer);
+        return true;
+    }
     const bool negative = expression.kind == ExprKind::Unary && expression.value == "-";
     const Expr& literal = negative ? *expression.left : expression;
     std::string spelling;
@@ -191,6 +228,22 @@ bool is_tensor_type(const std::string& type,
     return start == dimensions_end + 1;
 }
 
+bool statement_guarantees_return(const Stmt& statement);
+
+bool statements_guarantee_return(const std::vector<std::unique_ptr<Stmt>>& statements) {
+    for (const auto& statement : statements) {
+        if (statement_guarantees_return(*statement)) return true;
+    }
+    return false;
+}
+
+bool statement_guarantees_return(const Stmt& statement) {
+    return statement.kind == StmtKind::Return ||
+           (statement.kind == StmtKind::If && !statement.else_body.empty() &&
+            statements_guarantee_return(statement.body) &&
+            statements_guarantee_return(statement.else_body));
+}
+
 bool integer_literal_fits(const Expr& expression, const std::string& type) {
     const bool negative = expression.kind == ExprKind::Unary;
     const Expr& literal = negative ? *expression.left : expression;
@@ -248,46 +301,97 @@ SemanticResult Analyzer::analyze(Program& program) {
     diagnostics_.clear();
     functions_.clear();
     records_.clear();
+    record_symbol_ids_.clear();
+    record_field_symbol_ids_.clear();
+    record_declaration_spans_.clear();
+    record_field_declaration_spans_.clear();
+    function_declaration_spans_.clear();
     scopes_.clear();
     next_symbol_id_ = 1;
     push_scope();
 
-    for (const auto& record : program.records) {
-        if (is_known_type(record.name) || !records_.emplace(record.name,
-                std::unordered_map<std::string, std::string>{}).second) {
-            add_error("E-SEMA-032", "record name is already declared", record.span);
+    for (auto& record : program.records) {
+        record.symbol_id = 0;
+        for (auto& field : record.fields) {
+            field.type_symbol_id = 0;
+            field.symbol_id = 0;
+        }
+        if (builtin_type_symbol_id(record.name) != 0 ||
+            !records_.emplace(record.name, std::unordered_map<std::string, std::string>{}).second) {
+            Diagnostic diagnostic{DiagnosticSeverity::Error, "E-SEMA-032",
+                                  "record name is already declared", record.span};
+            if (const auto previous = record_declaration_spans_.find(record.name);
+                previous != record_declaration_spans_.end()) {
+                diagnostic.notes.push_back({previous->second, "previous record declaration is here"});
+            }
+            diagnostics_.push_back(std::move(diagnostic));
+        } else {
+            record.symbol_id = next_symbol_id_++;
+            record_symbol_ids_.emplace(record.name, record.symbol_id);
+            record_declaration_spans_.emplace(record.name, record.span);
         }
     }
-    for (const auto& record : program.records) {
+    for (auto& record : program.records) {
+        if (record.symbol_id == 0) continue;
         auto found_record = records_.find(record.name);
         if (found_record == records_.end()) {
             continue;
         }
-        for (const auto& field : record.fields) {
+        for (auto& field : record.fields) {
             if (found_record->second.contains(field.name)) {
-                add_error("E-SEMA-033", "record field is already declared", field.span);
+                Diagnostic diagnostic{DiagnosticSeverity::Error, "E-SEMA-033",
+                                      "record field is already declared", field.span};
+                const auto key = record.name + "." + field.name;
+                if (const auto previous = record_field_declaration_spans_.find(key);
+                    previous != record_field_declaration_spans_.end()) {
+                    diagnostic.notes.push_back({previous->second, "previous field declaration is here"});
+                }
+                diagnostics_.push_back(std::move(diagnostic));
                 continue;
             }
             if (!is_known_type(field.type) || field.type == "Void") {
                 add_error("E-SEMA-034", "record field has an unknown or invalid type", field.span);
                 continue;
             }
+            field.type_symbol_id = type_symbol_id(field.type);
+            field.symbol_id = next_symbol_id_++;
+            const auto key = record.name + "." + field.name;
+            record_field_symbol_ids_.emplace(key, field.symbol_id);
+            record_field_declaration_spans_.emplace(key, field.span);
             found_record->second.emplace(field.name, field.type);
         }
     }
 
-    for (const auto& function : program.functions) {
+    for (auto& function : program.functions) {
+        function.symbol_id = 0;
+        function.return_type_symbol_id = 0;
+        const auto previous_function = function_declaration_spans_.find(function.name);
         if (function.name == "say" || !numeric_conversion_target(function.name).empty() ||
-            functions_.contains(function.name)) {
-            add_error("E-SEMA-001", "function name is already declared", function.span);
+            records_.contains(function.name) || functions_.contains(function.name)) {
+            Diagnostic diagnostic{DiagnosticSeverity::Error, "E-SEMA-001",
+                                  "function name is already declared", function.span};
+            if (previous_function != function_declaration_spans_.end()) {
+                diagnostic.notes.push_back({previous_function->second,
+                                            "previous function declaration is here"});
+            } else if (const auto previous_record = record_declaration_spans_.find(function.name);
+                       previous_record != record_declaration_spans_.end()) {
+                diagnostic.notes.push_back({previous_record->second,
+                                            "conflicting record declaration is here"});
+            }
+            diagnostics_.push_back(std::move(diagnostic));
             continue;
         }
+        function.symbol_id = next_symbol_id_++;
         FunctionSignature signature;
         signature.return_type = function.return_type.empty() ? "Void" : function.return_type;
-        for (const auto& parameter : function.parameters) {
+        signature.symbol_id = function.symbol_id;
+        function.return_type_symbol_id = type_symbol_id(signature.return_type);
+        for (auto& parameter : function.parameters) {
+            parameter.resolved_type_symbol_id = 0;
             signature.parameter_names.push_back(parameter.name);
             signature.parameter_types.push_back(parameter.type);
-            if (!is_known_type(parameter.type)) {
+            parameter.resolved_type_symbol_id = type_symbol_id(parameter.type);
+            if (!is_known_type(parameter.type) || parameter.type == "Void") {
                 add_error("E-SEMA-002", "unknown parameter type", parameter.span);
             }
         }
@@ -295,6 +399,7 @@ SemanticResult Analyzer::analyze(Program& program) {
             add_error("E-SEMA-003", "unknown function return type", function.span);
         }
         functions_.emplace(function.name, std::move(signature));
+        function_declaration_spans_.emplace(function.name, function.span);
     }
 
     analyze_statements(program.statements);
@@ -341,6 +446,27 @@ bool Analyzer::is_known_type(const std::string& type) const {
            type == "Char" || type == "Text" || type == "Void";
 }
 
+std::uint64_t Analyzer::type_symbol_id(const std::string& type) const {
+    if (const auto builtin_id = builtin_type_symbol_id(type); builtin_id != 0) {
+        return builtin_id;
+    }
+    if (const auto record = record_symbol_ids_.find(type); record != record_symbol_ids_.end()) {
+        return record->second;
+    }
+    for (const auto& prefix : {std::string("List<"), std::string("Range<")}) {
+        if (type.starts_with(prefix) && type.size() > prefix.size() && type.back() == '>') {
+            return type_symbol_id(type.substr(prefix.size(), type.size() - prefix.size() - 1));
+        }
+    }
+    if (type.starts_with("Tensor<")) {
+        const auto dimensions_start = type.find(",[", 7);
+        if (dimensions_start != std::string::npos) {
+            return type_symbol_id(type.substr(7, dimensions_start - 7));
+        }
+    }
+    return 0;
+}
+
 std::string Analyzer::list_element_type(const std::string& type) const {
     return get_list_element_type(type);
 }
@@ -367,7 +493,11 @@ Analyzer::Binding* Analyzer::find_binding(const std::string& name) {
 
 std::uint64_t Analyzer::declare_binding(const std::string& name, Binding binding, SourceSpan span) {
     if (scopes_.back().contains(name)) {
-        add_error("E-SEMA-004", "name is already declared in this scope", span);
+        Diagnostic diagnostic{DiagnosticSeverity::Error, "E-SEMA-004",
+                              "name is already declared in this scope", span};
+        diagnostic.notes.push_back({scopes_.back().at(name).declaration_span,
+                                    "previous declaration is here"});
+        diagnostics_.push_back(std::move(diagnostic));
         return 0;
     }
     binding.symbol_id = next_symbol_id_++;
@@ -377,8 +507,15 @@ std::uint64_t Analyzer::declare_binding(const std::string& name, Binding binding
 }
 
 void Analyzer::analyze_statements(std::vector<std::unique_ptr<Stmt>>& statements) {
+    bool unreachable_reported = false;
+    bool terminates = false;
     for (auto& statement : statements) {
+        if (terminates && !unreachable_reported) {
+            add_error("E-SEMA-050", "unreachable statement", statement->span);
+            unreachable_reported = true;
+        }
         analyze_statement(*statement);
+        terminates = terminates || statement_guarantees_return(*statement);
     }
 }
 
@@ -392,6 +529,7 @@ void Analyzer::analyze_statement(Stmt& statement) {
                 statement.expression->kind == ExprKind::ListLiteral &&
                 statement.expression->arguments.empty()) {
                 statement.expression->inferred_type = type;
+                statement.expression->resolved_type_symbol_id = type_symbol_id(type);
                 value_type = type;
             } else if (has_explicit_type && is_integer_type(type) &&
             is_integer_literal_expression(*statement.expression)) {
@@ -404,7 +542,7 @@ void Analyzer::analyze_statement(Stmt& statement) {
         } else {
             value_type = analyze_expression(*statement.expression);
         }
-            if (has_explicit_type && !is_known_type(type)) {
+            if (has_explicit_type && (!is_known_type(type) || type == "Void")) {
             add_error("E-SEMA-002", "unknown variable type", statement.span);
             } else if (has_explicit_type && type != value_type && value_type != error_type) {
             add_error("E-SEMA-005", "initializer type does not match declared type", statement.span);
@@ -413,6 +551,7 @@ void Analyzer::analyze_statement(Stmt& statement) {
             statement.declared_type = resolved_type;
             statement.resolved_symbol_id = declare_binding(
                 statement.name, {resolved_type, statement.mutable_binding, statement.span}, statement.span);
+            statement.resolved_type_symbol_id = type_symbol_id(resolved_type);
         break;
     }
     case StmtKind::Assignment: {
@@ -431,6 +570,7 @@ void Analyzer::analyze_statement(Stmt& statement) {
                 add_error("E-SEMA-005", "assignment type does not match variable type", statement.span);
             }
         }
+        statement.resolved_type_symbol_id = type_symbol_id(statement.declared_type);
         break;
     }
     case StmtKind::Return: {
@@ -490,11 +630,13 @@ void Analyzer::analyze_statement(Stmt& statement) {
         }
         if (element_type.empty()) {
             if (iterable_type != error_type) {
-                add_error("E-SEMA-023", "for-each requires a List<T> or Text value", statement.expression->span);
+                add_error("E-SEMA-023", "for-each requires a List<T>, Range<T>, or Text value",
+                          statement.expression->span);
             }
             break;
         }
         statement.declared_type = element_type;
+        statement.resolved_type_symbol_id = type_symbol_id(element_type);
         push_scope();
         statement.resolved_symbol_id =
             declare_binding(statement.name, {element_type, false, statement.span}, statement.span);
@@ -572,7 +714,8 @@ std::string Analyzer::analyze_expression(Expr& expression) {
                    expression.value == ">" || expression.value == ">=") {
             if (left_type == right_type && left_type != error_type &&
                 (is_numeric_type(left_type) || left_type == "Char" || left_type == "Text" ||
-                 expression.value == "==" || expression.value == "!=")) {
+                 ((expression.value == "==" || expression.value == "!=") &&
+                  left_type == "Bool"))) {
                 type = "Bool";
             } else if (left_type != error_type && right_type != error_type) {
                 add_error("E-SEMA-016", "comparison operands have incompatible types", expression.span);
@@ -598,11 +741,13 @@ std::string Analyzer::analyze_expression(Expr& expression) {
             argument_types.push_back(analyze_expression(*argument));
         }
         if (expression.value == "say") {
-            if (argument_types.size() != 1 ||
+            if (argument_types.size() != 1 || argument_types[0] == "Void" ||
                 (!expression.argument_names.empty() && !expression.argument_names[0].empty())) {
-                add_error("E-SEMA-017", "say expects exactly one argument", expression.span);
+                add_error("E-SEMA-017", "say expects exactly one non-Void argument", expression.span);
             } else {
                 type = "Void";
+                expression.resolved_symbol = expression.value;
+                expression.resolved_symbol_id = builtin_function_symbol_id(expression.value);
             }
         } else {
             const auto function = functions_.find(expression.value);
@@ -629,6 +774,7 @@ std::string Analyzer::analyze_expression(Expr& expression) {
                     } else {
                         type = conversion_type;
                         expression.resolved_symbol = expression.value;
+                        expression.resolved_symbol_id = builtin_function_symbol_id(expression.value);
                     }
                 } else if (const auto record = records_.find(expression.value);
                            record == records_.end()) {
@@ -676,6 +822,7 @@ std::string Analyzer::analyze_expression(Expr& expression) {
                     if (fields_match) {
                         type = expression.value;
                         expression.resolved_symbol = expression.value;
+                        expression.resolved_symbol_id = record_symbol_ids_.at(expression.value);
                     } else {
                         add_error("E-SEMA-041", "record field value does not match its declared type",
                                   expression.span);
@@ -736,6 +883,7 @@ std::string Analyzer::analyze_expression(Expr& expression) {
                 } else {
                     type = function->second.return_type;
                     expression.resolved_symbol = expression.value;
+                    expression.resolved_symbol_id = function->second.symbol_id;
                 }
             }
         }
@@ -789,12 +937,36 @@ std::string Analyzer::analyze_expression(Expr& expression) {
             } else {
                 type = field->second;
                 expression.resolved_symbol = base_type + "." + expression.value;
+                expression.resolved_symbol_id =
+                    record_field_symbol_ids_.at(expression.resolved_symbol);
             }
         }
         break;
     }
     }
+    if (is_integer_type(type) &&
+        (expression.kind == ExprKind::Binary || expression.kind == ExprKind::Unary)) {
+        const auto result = evaluate_constant_expression(expression);
+        if (result.error == ConstantEvaluationError::Overflow ||
+            result.error == ConstantEvaluationError::DivisionByZero) {
+            add_error("E-SEMA-051",
+                      result.error == ConstantEvaluationError::DivisionByZero
+                          ? "constant expression divides by zero"
+                          : "constant integer expression overflows",
+                      result.span);
+            type = error_type;
+        } else if (result.error == ConstantEvaluationError::StepLimit) {
+            add_error("E-SEMA-052", "constant expression exceeds the evaluation limit", result.span);
+            type = error_type;
+        } else if (result.value &&
+                   std::holds_alternative<std::int64_t>(*result.value) &&
+                   !numeric_literal_fits(expression, type)) {
+            add_error("E-SEMA-022", "integer expression is outside its type range", expression.span);
+            type = error_type;
+        }
+    }
     expression.inferred_type = type;
+    expression.resolved_type_symbol_id = type_symbol_id(type);
     return type;
 }
 
@@ -805,7 +977,9 @@ bool Analyzer::type_integer_literal(Expr& expression, const std::string& type) {
         return false;
     }
     literal.inferred_type = type;
+    literal.resolved_type_symbol_id = type_symbol_id(type);
     expression.inferred_type = type;
+    expression.resolved_type_symbol_id = type_symbol_id(type);
     return true;
 }
 
@@ -821,16 +995,7 @@ std::string Analyzer::numeric_binary_type(Expr& expression, const std::string& l
 }
 
 bool Analyzer::always_returns(const std::vector<std::unique_ptr<Stmt>>& statements) const {
-    for (const auto& statement : statements) {
-        if (statement->kind == StmtKind::Return) {
-            return true;
-        }
-        if (statement->kind == StmtKind::If && !statement->else_body.empty() &&
-            always_returns(statement->body) && always_returns(statement->else_body)) {
-            return true;
-        }
-    }
-    return false;
+    return statements_guarantee_return(statements);
 }
 
 }

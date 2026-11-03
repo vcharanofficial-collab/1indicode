@@ -33,13 +33,17 @@ int main() {
             "text diagnostic should include the source line and underline");
 
     const auto json = indicode::format_diagnostics_json(source, {diagnostic});
-    require(json.starts_with("[{") && json.ends_with("}]"), "JSON diagnostics should be an array");
+    require(json.starts_with("{\"schemaVersion\":1,\"diagnostics\":[{") &&
+                json.ends_with("}]}"),
+            "JSON diagnostics should use the versioned schema envelope");
     require(json.find("sample\\\".indi") != std::string::npos,
             "JSON path should escape quotation marks");
     require(json.find("cannot assign \\\"bad\\\" to Int\\ncheck the value") != std::string::npos,
             "JSON message should escape quotes and line breaks");
     require(json.find("\"start\":{\"offset\":8,\"line\":1,\"column\":9}") != std::string::npos,
             "JSON should preserve structured start position");
+    require(json.find("\"notes\":[]") != std::string::npos,
+            "JSON should include an explicit notes array on each diagnostic");
 
     auto fixable_diagnostic = diagnostic;
     fixable_diagnostic.fix_it = indicode::DiagnosticFixIt{
@@ -56,6 +60,50 @@ int main() {
     require(indicode::format_diagnostics_json(source, {diagnostic}).find("\"fixIt\":null") !=
                 std::string::npos,
             "JSON diagnostics without a fix-it should explicitly encode null");
+
+    auto noted_diagnostic = fixable_diagnostic;
+    noted_diagnostic.notes.push_back({
+        {{0, 1, 1}, {3, 1, 4}}, "related declaration is here"
+    });
+    const auto noted_text = indicode::format_diagnostic_text(source, noted_diagnostic);
+    require(noted_text.find("sample\".indi:1:1: note: related declaration is here") !=
+                std::string::npos,
+            "text diagnostics should report secondary source spans");
+    const auto noted_json = indicode::format_diagnostics_json(source, {noted_diagnostic});
+    require(noted_json.find("\"notes\":[{\"message\":\"related declaration is here\"") !=
+                std::string::npos &&
+                noted_json.find("\"start\":{\"offset\":0,\"line\":1,\"column\":1}") !=
+                    std::string::npos,
+            "JSON diagnostics should serialize note messages and source positions");
+    const auto multiple_json = indicode::format_diagnostics_json(
+        source, {diagnostic, noted_diagnostic});
+    require(multiple_json.find("\"diagnostics\":[{") != std::string::npos &&
+                multiple_json.find("},{\"severity\":\"error\"") != std::string::npos,
+            "versioned JSON schema should preserve multiple diagnostic order");
+
+    const indicode::SourceFile golden_source{"diag.indi", "x"};
+    indicode::Diagnostic golden_diagnostic{
+        indicode::DiagnosticSeverity::Warning,
+        "W-TEST-001",
+        "bad\nvalue",
+        {{0, 1, 1}, {1, 1, 2}},
+        indicode::DiagnosticFixIt{
+            {{0, 1, 1}, {1, 1, 2}}, "y", "replace"
+        }
+    };
+    golden_diagnostic.notes.push_back({{{0, 1, 1}, {1, 1, 2}}, "prior"});
+    require(indicode::format_diagnostics_json(golden_source, {golden_diagnostic}) ==
+                "{\"schemaVersion\":1,\"diagnostics\":[{\"severity\":\"warning\","
+                "\"code\":\"W-TEST-001\",\"message\":\"bad\\nvalue\",\"file\":\"diag.indi\","
+                "\"start\":{\"offset\":0,\"line\":1,\"column\":1},"
+                "\"end\":{\"offset\":1,\"line\":1,\"column\":2},"
+                "\"fixIt\":{\"message\":\"replace\",\"replacement\":\"y\","
+                "\"start\":{\"offset\":0,\"line\":1,\"column\":1},"
+                "\"end\":{\"offset\":1,\"line\":1,\"column\":2}},"
+                "\"notes\":[{\"message\":\"prior\","
+                "\"start\":{\"offset\":0,\"line\":1,\"column\":1},"
+                "\"end\":{\"offset\":1,\"line\":1,\"column\":2}}]}]}",
+            "diagnostic schema v1 should preserve every field in deterministic golden output");
 
     const indicode::SourceFile unicode_source{"unicode.indi", "\tπ = value\n"};
     const indicode::Diagnostic unicode_diagnostic{

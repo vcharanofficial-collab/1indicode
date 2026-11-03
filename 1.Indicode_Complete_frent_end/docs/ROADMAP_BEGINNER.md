@@ -8,11 +8,11 @@ We are building the part of a compiler that reads Indicode source code and check
 
 LLVM is a large, separate compiler framework. This project does **not** download, copy, or build LLVM. Our front end and its tests must keep working without LLVM. Connecting an optional backend is a later project stage, after the front end has a stable typed representation.
 
-The [front-end completion plan](../Compiler_Front_End_Remaining_Work.pdf) is the source of truth for remaining front-end work. The previous all-area blueprint's 777 concepts were not 777 front-end requirements; the front-end section contains 40 catalogue entries. The editable audit has 15 implemented, 13 partial, and 12 not started. See the [versioned grammar specification](LANGUAGE_SPEC_V1.md) for syntax v1.0.0.
+The [front-end completion plan](../Compiler_Front_End_Remaining_Work.pdf) is the source of truth for remaining front-end work. The previous all-area blueprint's 777 concepts were not 777 front-end requirements; the front-end section contains 40 catalogue entries. The editable audit now has 28 implemented to v1 scope, 0 partial, and 12 not started. See the [versioned grammar specification](LANGUAGE_SPEC_V1.md) and [semantic rules](SEMANTICS_V1.md).
 
-## Current Overall Progress: 95%
+## Current Overall Progress: 97%
 
-This percentage means estimated completion of the **front-end work needed before a future LLVM adapter**. It does not mean 95% of LLVM, machine-code generation, a GPU compiler, or the AI runtime is complete.
+This percentage means estimated completion of the **front-end work needed before a future LLVM adapter**. It does not mean 97% of LLVM, machine-code generation, a GPU compiler, or the AI runtime is complete.
 
 The estimate uses the weighted acceptance areas in `PROGRESS.md`:
 
@@ -22,13 +22,16 @@ The estimate uses the weighted acceptance areas in `PROGRESS.md`:
 - Lexer columns also count UTF-8 scalars rather than encoded bytes and expand tabs to four-column stops; offsets remain byte-based.
 - JSON diagnostics can include source edits (fix-its); missing function-parameter colons receive an insertion suggestion.
 - Out-of-range decimal floating-point literals are rejected during semantic analysis.
-- Local variables, parameters, and loop bindings receive stable IDs that are checked through HIR lowering and independent HIR verification.
+- Variables, parameters, loop bindings, functions, record types/fields, and references receive stable IDs checked through HIR lowering and independent HIR verification.
 - The library can be installed and used by a separate CMake consumer project.
 - The source manager owns source buffers and maps byte offsets through indexed line tables, including CR/LF/CRLF, UTF-8 scalar columns, and tabs.
 - Lexer tokens retain typed keyword/literal payloads, and comments and whitespace are preserved as source-spanned trivia; the recursive-descent and Pratt grammar is specified and versioned as v1.0.0.
-- `indicode typed-json` emits verified HIR as JSON with a schema version and stable local binding IDs; deserialization and a compatibility policy are still future work.
-- `indicode ast-json` serializes parsed declarations and syntax nodes with source spans; golden snapshots and a compatibility policy remain future work.
-- Updated weighted estimate: **95.20%, rounded to 95%** (see `PROGRESS.md` and the [completion plan](../Compiler_Front_End_Remaining_Work.pdf)).
+- `indicode typed-json` emits verified HIR as JSON with a schema version and stable symbol IDs; deserialization and broader compatibility guarantees remain future work.
+- `indicode ast-json` serializes parsed declarations and syntax nodes with source spans; deterministic v1 golden output is tested.
+- Parser synchronization preserves valid siblings across expression errors and later statements after malformed declarations.
+- Bounded constant evaluation, conservative control-flow/return checks, and exact static tensor-shape rules are specified and tested.
+- Diagnostic schema v1 covers locations, notes, fixes, escaping, and deterministic full-output golden behavior.
+- Updated weighted estimate: **96.95%, rounded to 97%** (see `PROGRESS.md` and the [completion plan](../Compiler_Front_End_Remaining_Work.pdf)).
 
 This is an estimate, not a marketing score. It may go down if a review finds missing acceptance behavior. Passing tests prove only the tested cases, not completeness of the language.
 

@@ -12,23 +12,23 @@ This repository is a real, buildable, tested compiler-front-end prototype, but i
 
 ## Completion
 
-**Overall front-end completion: 95%**
+**Overall front-end completion: 97%**
 
-The percentage measures progress toward the agreed front-end-only boundary in the [completion plan](../Compiler_Front_End_Remaining_Work.pdf), not progress toward LLVM itself or the full compiler. It is a weighted estimate: each area's weight is fixed, and completion credit requires implemented, tested, documented acceptance behavior. Recent work adds an owning source manager with indexed line/column lookup plus schema-versioned AST JSON. The weighted estimate is now **95.20%, rounded to 95%**; these changes close specific infrastructure gaps but do not close the larger grammar, semantic, tooling, and conformance gaps.
+The percentage measures progress toward the agreed front-end-only boundary in the [completion plan](../Compiler_Front_End_Remaining_Work.pdf), not progress toward LLVM itself or the full compiler. It is a weighted estimate: each area's weight is fixed, and completion credit requires implemented, tested, documented acceptance behavior. The 13 previously partial catalogue items now meet the documented single-file v1 acceptance level. The weighted estimate is **96.95%, rounded to 97%**; modules/imports, overloads, production readiness, and full conformance remain unfinished.
 
 | Acceptance area | Weight | Area completion | Evidence / remaining work |
 | --- | --- | --- |
 | Project/build foundation | 5% | 95% | C++20, CMake, CTest, install/export package config, public headers and a separately configured/compiled package consumer; CI/release acceptance remains. |
-| Source manager and diagnostics | 10% | 92% | Source manager owns immutable-by-interface buffers, stable file IDs, indexed CR/LF/CRLF line tables, byte-to-line/scalar-column mapping, source spans, tab-aware carets, JSON escaping, and fix-it edits; terminal display-width handling, broad fix-it coverage, and a stable versioned JSON diagnostics schema remain. |
+| Source manager and diagnostics | 10% | 97% | Source manager owns immutable-by-interface buffers, stable file IDs, indexed CR/LF/CRLF line tables, byte-to-line/scalar-column mapping, source spans, tab-aware carets, secondary notes, JSON escaping, and validated fix-it edits; terminal display-width handling remains. |
 | Lexer | 15% | 92% | ASCII identifiers, typed keyword and literal payloads, exact-source trivia, UTF-8 source validation, strings/escapes, binary/octal/hex integers, digit separators, nested block comments with newline preservation, and scalar/tab-aware source columns; Unicode identifiers, suffix policy, and complete numeric grammar remain. |
-| Parser and AST | 15% | 95% | Grammar v1.0.0 specifies the accepted syntax; functions, blocks, calls, tested Pratt precedence/associativity, typed lists, indexing, for-each, named arguments, records/member access, tensor element/shape types, integer ranges, nested `else if`, a missing-parameter-colon fix-it, and schema-versioned AST JSON; full grammar recovery and AST golden snapshots remain. |
-| Name resolution | 10% | 90% | Lexical scopes, global/function/parameter/loop bindings, stable local symbol IDs, shadowing, and HIR revalidation of binding identity; modules/imports and stable function/type identities remain. |
-| Type checking and semantic validation | 15% | 98% | Scalar/radix integer inference, integer and floating literal range checks, checked numeric conversions, record construction/field types, tensor element/shape compatibility, integer range bounds, indexing, nested conditional return analysis, loops and mutability; tensor operations, ownership/effects and full conversion policies remain. |
-| Typed HIR and verification | 15% | 99% | Project-owned typed HIR carries stable local binding IDs, has a schema-versioned JSON serializer, and covers records, member access, tensor types, checked numeric conversions, collections, and integer ranges; verifier rechecks lexical visibility, type identity, immutability, return paths, and expression/call/loop contracts. Deserialization, compatibility policy, and broader language invariants remain. |
-| CLI and diagnostics tooling | 5% | 95% | `check`, `tokens`, `ast`, `ast-json`, `typed`, `typed-json`, source excerpts/carets aligned across tabs and UTF-8 scalar columns, and JSON diagnostics with fix-its; terminal-specific display widths, editor interfaces, and stable diagnostics/HIR compatibility policies remain. |
-| Tests, docs, and integration | 10% | 99% | Eighteen CTest cases cover source-manager line/column mapping, lexer payload/trivia contracts, versioned grammar and exhaustive operator precedence/associativity, parser recovery/fix-its, deterministic AST-printer golden output for every currently implemented node kind, schema-versioned AST/HIR JSON, symbol identity/scope/mutability in HIR, nested `else if` return paths, float literal bounds, deterministic malformed-input smoke testing, tensor shapes, diagnostics, CLI, and an installed-package consumer; full conformance, coverage-guided fuzzing, sanitizers and CI remain. |
+| Parser and AST | 15% | 98% | Grammar v1.0.0 specifies the accepted syntax; deterministic AST golden output covers every v1 node/operator, and declaration/statement/expression recovery preserves valid nodes; broader grammar and conformance testing remain. |
+| Name resolution | 10% | 95% | Separate v1 namespaces, nested scopes/shadowing, stable identities for supported declarations/references, and independent HIR binding checks; modules/imports/overloads are excluded by v1 and remain future work. |
+| Type checking and semantic validation | 15% | 99% | Documented v1 rules cover declarations, expressions/operators/calls/conversions, records, collections, tensor shapes, constant evaluation, and conservative control-flow/return validation; ownership/effects and tensor operations remain outside v1. |
+| Typed HIR and verification | 15% | 99% | Project-owned typed HIR carries stable local/function/type/field identities and schema-versioned JSON; verifier rechecks lexical visibility, identity uniqueness/references, immutability, return paths, and expression/call/loop contracts. Deserialization and compatibility policy remain. |
+| CLI and diagnostics tooling | 5% | 98% | `check`, `tokens`, `ast`, `ast-json`, `typed`, `typed-json`, source excerpts/carets aligned across tabs and UTF-8 scalar columns, and schema-v1 JSON diagnostics with notes/fix-its; terminal-specific display widths and editor interfaces remain. |
+| Tests, docs, and integration | 10% | 99% | Eighteen CTest cases cover source mapping, lexer/trivia, grammar/operators, AST golden output, expression/declaration recovery, semantic constant/flow/tensor checks, HIR identities, full diagnostic JSON golden output, CLI, malformed-input smoke testing, and an installed-package consumer; full conformance, coverage-guided fuzzing, sanitizers, and CI remain. |
 
-Updated weighted estimate: 4.75 + 9.2 + 13.8 + 14.25 + 9.0 + 14.7 + 14.85 + 4.75 + 9.9 = **95.20%, rounded to 95%**. This is a judgment-based estimate for the implemented front-end boundary, not a claim that 95% of a complete language specification or all possible compiler work is done.
+Updated weighted estimate: 4.75 + 9.7 + 13.8 + 14.7 + 9.5 + 14.85 + 14.85 + 4.9 + 9.9 = **96.95%, rounded to 97%**. This is a judgment-based estimate for the implemented v1 front-end boundary, not a claim that 97% of a complete language specification or all possible compiler work is done.
 
 ## Work completed
 
@@ -77,31 +77,38 @@ Updated weighted estimate: 4.75 + 9.2 + 13.8 + 14.25 + 9.0 + 14.7 + 14.85 + 4.75
 - HIR verification now independently checks lexical name visibility, matching symbol identity and type, immutable assignments, duplicate declarations, loop scope boundaries, and global bindings visible from functions.
 - Added CMake install/export rules, a versioned package config, and a CTest consumer that installs the library, configures a separate CMake project, links `indicode::frontend`, and runs it.
 - Added canonical `typed-json` CLI output with schema version 1, typed nodes, source spans, argument labels, and stable local symbol IDs; a CMake JSON check validates the schema and a parameter reference.
+- Completed the v1 AST-printer golden snapshot for every declaration, statement, expression kind, and grammar operator.
+- Added expression-delimiter recovery for call arguments/list elements, retained valid sibling expressions, documented synchronization sets, and tested applied parser fix-its.
+- Added stable per-analysis IDs for functions, record types/fields, builtins, type references, and calls; HIR verification rejects duplicate or mismatched identities.
+- Specified v1 namespaces and semantic typing rules, including conservative branch/loop return analysis, exact tensor shape compatibility, and which module/import/overload features are excluded.
+- Added a bounded integer/Boolean constant evaluator with short-circuiting, signed overflow/division-by-zero diagnostics, a 256-node budget, conversion-range integration, and boundary tests.
+- Published diagnostic text/JSON policies with secondary notes and schema v1; full-output golden tests cover spans, fix-its, notes, escaping, and multiple diagnostics.
+- Added semantic errors for unreachable statements, invalid `Void` values, duplicate declarations with previous-location notes, and invalid `say(Void)` calls; HIR independently rejects the latter.
 
 ## Current limitations
 
 - Grammar v1.0.0 is specified in `LANGUAGE_SPEC_V1.md`; modules/imports, generic function/record declarations, overloads, and declaration visibility are explicitly outside this syntax version.
 - Identifiers are ASCII-only. UTF-8 source sequences are validated, but Unicode identifier rules and full Unicode display-column mapping are not implemented.
 - Numeric suffixes, raw strings, and the complete string escape repertoire remain incomplete.
-- Semantic checking is a core subset; conversions require explicit checked mode and only basic static tensor shape equality is implemented. Numeric widening, tensor operations/broadcasting/device checks, exhaustive control-flow analysis, overloads, generics, module resolution, and complete diagnostics rendering remain.
-- Parser coverage is still a subset: full grammar recovery remains. Range endpoint inclusivity and runtime iteration behavior are not defined because this front end does not execute programs.
-- Typed HIR/verifier currently cover the existing language subset only; they need complete semantic coverage, stable function/type identities, deserialization, a compatibility policy, and conformance tests before an LLVM adapter is ready.
+- Semantic checking follows the documented single-file v1 rules; conversions require explicit checked mode and tensor compatibility is exact shape/type equality. Ownership/effects, tensor operations/broadcasting/device checks, and numeric widening are outside v1.
+- Modules/imports, overloads, and generic declarations are not in grammar v1; module/import resolvers and overload selection remain unstarted. Range runtime behavior is undefined because this front end does not execute programs.
+- Typed HIR/verifier cover the supported v1 subset and verify stable identities; deserialization, broader compatibility guarantees, and full language conformance remain before an LLVM adapter is ready.
 
 ## Milestones
 
 1. **Source model and lexer:** complete UTF-8/source management, token coverage, literal validation, and lexer tests.
-2. **Parser and AST:** implement the documented core grammar, precedence, source spans, AST printer, and recovery tests.
-3. **Names and types:** add scopes, symbol resolution, core types, inference, conversion/range checks, and diagnostics.
-4. **Core semantic validation:** add function/control-flow checks, mutability rules, and negative tests.
-5. **Typed HIR:** initial lowering, printer, verifier, schema-versioned JSON serialization, and tests are implemented; complete semantics, deserialization, compatibility policy, and robust invariants remain.
-6. **Front-end CLI and release checks:** `check`, `tokens`, `ast`, `ast-json`, `typed`, `typed-json`, and JSON diagnostics exist; stable schema/compatibility policies, full integration/conformance tests, fuzzing, and release checks remain.
+2. **Parser and AST:** documented v1 grammar, precedence, source spans, deterministic printer output, and declaration/statement/expression recovery are implemented and tested.
+3. **Names and types:** v1 scopes, identities, name resolution, typing, conversion/range checks, and diagnostics are implemented and tested.
+4. **Core semantic validation:** v1 function/control-flow checks, mutability, constant evaluation, and negative tests are implemented.
+5. **Typed HIR:** lowering, printer, verifier, schema-versioned JSON, symbol identity checks, and focused tests cover the supported v1 subset; deserialization and broader compatibility guarantees remain.
+6. **Front-end CLI and release checks:** `check`, `tokens`, `ast`, `ast-json`, `typed`, `typed-json`, and schema-v1 JSON diagnostics exist; full conformance, fuzzing, sanitizers, and release/CI checks remain.
 
 LLVM/backend work begins only after these front-end milestones are complete and accepted. The front end is being designed to connect to LLVM later without requiring the LLVM framework to be downloaded into this repository now.
 
 ## Latest verification
 
-- A fresh Release-mode out-of-tree CMake configure/build succeeded with GCC 13.3 in `/tmp/indicode-ast-json-build`.
-- All 18 CTest cases pass, including lexer payload/trivia contracts, versioned grammar and exhaustive operator precedence checks, source-manager line/column tests, AST-printer golden output, AST/typed-HIR JSON inspection, and the separately built installed-package consumer.
+- The Release-mode out-of-tree build in `/tmp/indicode-partial-build` succeeds with GCC 13.3.
+- All 18 CTest cases pass, including lexer payload/trivia contracts, versioned grammar and operator coverage, parser recovery/fix-its, semantic constant/flow/tensor checks, HIR identity verification, diagnostic JSON golden output, CLI checks, and the installed-package consumer.
 - The suite also verifies nested `else if` return coverage, malformed HIR return-path rejection, invalid HIR parameter/call/return/symbol-scope invariants, UTF-8/tab diagnostic caret alignment, and float literal overflow/underflow rejection.
 - Lexer regression tests confirm that UTF-8 byte offsets and human-facing source columns remain distinct and consistent after tabs and non-ASCII string contents.
 - The verification build was kept outside the project; no generated build files were added to the repository.

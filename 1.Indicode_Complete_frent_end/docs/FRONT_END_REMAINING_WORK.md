@@ -7,23 +7,23 @@
 
 The front end reads source, checks it, reports source-aware errors, and produces a semantically valid, independently verified Indicode HIR. It does not generate LLVM IR, machine code, executables, or run programs.
 
-The current progress report calculates a **95.20% weighted estimate**, displayed as **95%**. The estimated gap is **4.80 percentage points** on that judgment-based scale. This is not a claim that 95% of the language specification or 95% of the PDF catalogue is implemented.
+The current progress report calculates a **96.95% weighted estimate**, displayed as **97%**. The estimated gap is **3.05 percentage points** on that judgment-based scale. This is not a claim that 97% of the language specification or 97% of the PDF catalogue is implemented.
 
 The old PDF described a 777-concept catalogue across the whole language/compiler project. Only **40 catalogue entries (IDs 445–484)** are in its compiler-front-end section. In the current implementation audit:
 
 | Front-end catalogue status | Count |
 |---|---:|
-| Implemented to the current scoped acceptance level | 15 |
-| Partially implemented; more acceptance work remains | 13 |
+| Implemented to the v1 scoped acceptance level | 28 |
+| Partially implemented; more acceptance work remains | 0 |
 | Not implemented yet | 12 |
 | **Front-end catalogue total** | **40** |
-| **Still unfinished (partial + not implemented)** | **25** |
+| **Still unfinished (partial + not implemented)** | **12** |
 
-These inventory counts and the 95.20% weighted estimate measure different things. The remaining 737 entries in the full catalogue are outside this front-end-only plan; this is not a claim that they are complete.
+These inventory counts and the 96.95% weighted estimate measure different things. The remaining 737 entries in the full catalogue are outside this front-end-only plan; this is not a claim that they are complete.
 
 ## Remaining catalogue entries
 
-“Done” means the concept has an implementation and focused test for the currently scoped behavior. “Partial” means a subset exists, but the listed completion evidence is still required. “Not started” means there is no implementation to accept yet. Any feature intentionally excluded from the v1 language must be marked as such in the versioned specification and approved before it is removed from this list.
+“Done” means the concept has an implementation and focused test for the documented v1 scope. “Partial” means a subset exists, but the listed completion evidence is still required. “Not started” means there is no implementation to accept yet. Features excluded from v1 remain visible in their own catalogue rows rather than being silently counted as implemented.
 
 | ID | PDF concept | Audit status | Work / evidence still needed |
 |---:|---|---|---|
@@ -44,27 +44,27 @@ These inventory counts and the 95.20% weighted estimate measure different things
 | 459 | AST context | Not started | Add a clear AST owner/context and lifetime contract for parsed programs and source references. |
 | 460 | AST node arena | Not started | Use an arena or document/measure an alternative ownership design; test destruction and large-input behavior. |
 | 461 | AST visitor | Not started | Provide exhaustive, type-safe visitors and tests that every node kind is visited. |
-| 462 | AST printer | Partial | Deterministic golden test now covers every currently implemented declaration, statement, and expression node; repeat this against the frozen v1 grammar before accepting the item. |
+| 462 | AST printer | Done | Deterministic golden output covers every v1 declaration, statement, expression kind, prefix operator, and binary operator. |
 | 463 | AST serializer | Done | Keep schema-v1 JSON tests for every node and span; define compatibility policy before treating the schema as stable. |
-| 464 | Syntax recovery | Partial | Recover at declaration, statement, and expression boundaries; test multiple errors without losing later valid declarations. |
-| 465 | Error synchronization | Partial | Specify synchronization tokens/sets and add regression tests for cascading-error suppression. |
-| 466 | Symbol identity | Partial | Add stable identities for functions, types, modules, and imported/overloaded symbols, not only local bindings. |
-| 467 | Scope table | Partial | Specify namespace separation, visibility, shadowing, and scope lifetime; test nested and module scopes. |
+| 464 | Syntax recovery | Done | Declaration, statement, and delimited-expression recovery preserve later declarations and valid sibling expressions; malformed-input tests verify diagnostics and retained AST nodes. |
+| 465 | Error synchronization | Done | [ERROR_RECOVERY_V1.md](./ERROR_RECOVERY_V1.md) specifies synchronization boundaries; regression tests cover multiple errors and cascading-error suppression. |
+| 466 | Symbol identity | Done | Stable per-analysis identities cover v1 values, functions, record types/fields, builtin types/functions, and references, with HIR identity verification. Module/import/overload identities are excluded by v1 and tracked under 468–470. |
+| 467 | Scope table | Done | [SEMANTICS_V1.md](./SEMANTICS_V1.md) specifies v1 value/function/type namespaces, visibility, shadowing, and block/function lifetime; nested shadowing and HIR scope checks are tested. Module scopes are excluded by v1. |
 | 468 | Module resolver | Not started | Define module identity/search roots/cycles and implement deterministic resolution with positive and negative tests. |
 | 469 | Import resolver | Not started | Implement import paths, aliases, visibility, ambiguity, and missing-import diagnostics. |
 | 470 | Overload candidate set | Not started | Define overload selection and ambiguity rules; test exact, failed, and ambiguous candidate resolution. |
-| 471 | Name binding | Partial | Bind every variable/function/type reference once and diagnose unknown, inaccessible, ambiguous, and invalid references. |
-| 472 | Type checker | Partial | Complete v1 typing for all declarations/expressions/operators/calls/conversions and reject every invalid combination with stable diagnostics. |
+| 471 | Name binding | Done | Every supported v1 variable, function, record, field, and type reference is resolved to an identity; unknown and duplicate references/declarations have stable diagnostics. Ambiguous/inaccessible references cannot occur without the v1-excluded imports/overloads and are tracked under 468–470. |
+| 472 | Type checker | Done | [SEMANTICS_V1.md](./SEMANTICS_V1.md) defines the supported v1 typing rules; semantic and HIR tests cover declarations, expressions, operators, calls, conversions, collections, records, tensors, and stable negative diagnostics. |
 | 473 | Constraint solver | Not started | If generics/constraints are in v1, implement constraint collection/solving and inconsistent/unsatisfied-constraint tests. |
 | 474 | Type substitution engine | Not started | If generics are in v1, implement substitution, occurs/consistency checks as required, and nested-generic tests. |
-| 475 | Constant evaluator | Partial | Define constant expressions, overflow, evaluation limits, and error behavior; test valid and invalid compile-time expressions. |
-| 476 | Control-flow validation | Partial | Model reachability and all supported branches/loops; test unreachable/invalid exits and return typing. |
-| 477 | Definite return analysis | Partial | Prove every reachable path of non-Void functions returns; cover nested branches, loops, and unreachable statements. |
+| 475 | Constant evaluator | Done | v1 integer/Boolean constant forms, short-circuiting, signed overflow, division-by-zero, and the 256-node evaluation budget are specified and tested. |
+| 476 | Control-flow validation | Done | Conditions/counts, return typing, reachable statements, and supported branch/loop behavior are specified and tested; loops are conservatively not assumed to execute. |
+| 477 | Definite return analysis | Done | Nested conditional paths and unreachable statements are tested; the same conservative loop rule is independently enforced by HIR verification. |
 | 478 | Effect checker | Not started | Define the v1 effect model (or explicitly defer it by a scope decision) and validate declared/used effects. |
 | 479 | Ownership checker | Not started | Define ownership, borrowing/lifetimes, and unsafe boundaries (or explicitly defer them); add misuse and valid-flow tests. |
-| 480 | Tensor shape checker | Partial | Complete static rank/dimension checks and define supported broadcast, dtype, and device compatibility rules; test mismatches. |
-| 481 | Diagnostic engine | Partial | Add notes/secondary spans, stable severity/code policy, multi-error quality, complete fix-it validation, and golden output tests. |
-| 482 | JSON diagnostics | Partial | Publish/version the schema and test all fields, locations, notes, fixes, escaping, and compatibility. |
+| 480 | Tensor shape checker | Done | Static rank, numeric element-type, and literal/symbolic dimension equality are tested. v1 explicitly has no tensor operations, broadcasting, or device model, so those compatibility rules do not apply. |
+| 481 | Diagnostic engine | Done | Secondary notes, stable severity/code policy, multiple-error recovery, applied-fix-it validation, and deterministic text/JSON golden tests are implemented. |
+| 482 | JSON diagnostics | Done | [DIAGNOSTICS_V1.md](./DIAGNOSTICS_V1.md) publishes schema v1; golden tests cover every field, locations, notes, fixes, escaping, ordering, and the version envelope. |
 | 483 | Language server index | Not started | Build a source-aware symbol/reference index API and test definitions, references, scopes, and invalidation. |
 | 484 | Incremental parse support | Not started | Define edit ranges/cache invalidation, implement incremental parsing, and prove results match clean full parses. |
 

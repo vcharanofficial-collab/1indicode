@@ -20,12 +20,18 @@ struct DiagnosticFixIt {
     std::string message;
 };
 
+struct DiagnosticNote {
+    SourceSpan span;
+    std::string message;
+};
+
 struct Diagnostic {
     DiagnosticSeverity severity = DiagnosticSeverity::Error;
     std::string code;
     std::string message;
     SourceSpan span;
     std::optional<DiagnosticFixIt> fix_it;
+    std::vector<DiagnosticNote> notes;
 
     Diagnostic() = default;
     Diagnostic(DiagnosticSeverity severity, std::string code, std::string message,

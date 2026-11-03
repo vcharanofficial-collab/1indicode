@@ -10,6 +10,9 @@ parser, lexer, and conformance-test updates. Bug fixes that reject malformed
 source or accept syntax already described here do not change the grammar
 version.
 
+Static binding and typing rules are specified separately in
+[SEMANTICS_V1.md](./SEMANTICS_V1.md).
+
 ## Source and tokens
 
 Source is UTF-8. Invalid UTF-8 is diagnosed. Identifiers are ASCII and have the
@@ -121,3 +124,32 @@ and HIR compatibility have separate acceptance requirements and are not
 implied by a successful parse. A future incompatible syntax change must update
 this version, the public `grammar_version` constant, examples, and tests
 together.
+
+The v1 namespace model has separate value, function, and type lookup. A local
+value may shadow an outer value, but duplicate declarations in the same scope
+are errors. Record names and function names cannot collide because both use
+identifier-call syntax. Functions and record types have stable per-program
+symbol identities; module/import identities and overload identities do not
+exist in v1 because modules, imports, and overloads are not supported.
+
+The v1 tensor type is a value type with a numeric element type and a non-empty
+list of non-negative integer or symbolic dimensions. Assignments, returns,
+record fields, and function arguments require exact element-type, rank, and
+dimension agreement; symbolic names match literally. Tensor operations,
+broadcasting, dynamic shape guards, and device placement are unsupported in
+v1, so there is no broadcast or device compatibility rule to apply.
+
+Ownership/borrowing and effect annotations/checking are not represented in v1.
+They require a future language-version and semantic-design decision.
+
+Control-flow analysis treats `return` as terminating, and a conditional as
+terminating only when it has an `else` and every branch terminates. `while`,
+`repeat`, and `for` loops are never assumed to execute; a return inside a loop
+does not prove a function returns. A statement following a guaranteed return
+is an error (`E-SEMA-050`).
+
+Constant evaluation v1 is limited to integer and Boolean literal expressions,
+the supported unary operators, arithmetic, comparisons, and short-circuit
+Boolean operators. It checks signed 64-bit overflow and division by zero and
+uses a deterministic 256-node evaluation budget. Non-constant expressions are
+not errors from the evaluator; the ordinary type checker handles them.

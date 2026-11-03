@@ -94,6 +94,9 @@ int main() {
                 recoverable_result.program.statements.size() == 1 &&
                 recoverable_result.program.statements[0]->name == "survivor",
             "parser recovery should retain valid declarations after a malformed function");
+    require(recoverable_result.diagnostics[0].fix_it.has_value() &&
+                recoverable_result.diagnostics[0].fix_it->replacement == ": ",
+            "missing parameter separators should include a precise insertion fix-it");
 
     const std::vector<indicode::Token> empty_tokens;
     const auto empty_result = indicode::Parser(empty_tokens).parse();

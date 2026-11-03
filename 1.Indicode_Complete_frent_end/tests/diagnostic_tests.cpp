@@ -41,6 +41,22 @@ int main() {
     require(json.find("\"start\":{\"offset\":8,\"line\":1,\"column\":9}") != std::string::npos,
             "JSON should preserve structured start position");
 
+    auto fixable_diagnostic = diagnostic;
+    fixable_diagnostic.fix_it = indicode::DiagnosticFixIt{
+        {{13, 1, 14}, {13, 1, 14}}, ": ", "insert ':' after the parameter name"
+    };
+    const auto fixable_text = indicode::format_diagnostic_text(source, fixable_diagnostic);
+    require(fixable_text.find("help: insert ':' after the parameter name") != std::string::npos,
+            "text diagnostics should display available fix-it guidance");
+    const auto fixable_json = indicode::format_diagnostics_json(source, {fixable_diagnostic});
+    require(fixable_json.find("\"fixIt\":{\"message\":\"insert ':' after the parameter name\"") !=
+                std::string::npos &&
+                fixable_json.find("\"replacement\":\": \"") != std::string::npos,
+            "JSON diagnostics should encode fix-it text, replacement, and source span");
+    require(indicode::format_diagnostics_json(source, {diagnostic}).find("\"fixIt\":null") !=
+                std::string::npos,
+            "JSON diagnostics without a fix-it should explicitly encode null");
+
     const indicode::SourceFile unicode_source{"unicode.indi", "\tπ = value\n"};
     const indicode::Diagnostic unicode_diagnostic{
         indicode::DiagnosticSeverity::Error,

@@ -10,16 +10,19 @@ LLVM is a large, separate compiler framework. This project does **not** download
 
 The PDF is a blueprint, not a list of features already completed. Its 777 concepts are a long-term catalogue, not 777 built-in types or a promise to implement every idea immediately.
 
-## Current Overall Progress: 91%
+## Current Overall Progress: 93%
 
-This percentage means estimated completion of the **front-end work needed before a future LLVM adapter**. It does not mean 86% of LLVM, machine-code generation, a GPU compiler, or the AI runtime is complete.
+This percentage means estimated completion of the **front-end work needed before a future LLVM adapter**. It does not mean 92% of LLVM, machine-code generation, a GPU compiler, or the AI runtime is complete.
 
 The estimate uses the weighted acceptance areas in `PROGRESS.md`:
 
 - Records, named construction, member checking, checked numeric conversions, static/symbolic tensor shapes, improved declaration recovery, and parser robustness coverage have been added.
 - Integer ranges and typed `for` bindings are supported, along with nested `else if` return-path analysis and HIR verification.
 - Text diagnostic carets align with expanded tabs and UTF-8 scalar columns; full terminal display-width handling remains future work.
-- Updated weighted estimate: 90.65%, rounded to **91%** (see `PROGRESS.md`).
+- Lexer columns also count UTF-8 scalars rather than encoded bytes and expand tabs to four-column stops; offsets remain byte-based.
+- JSON diagnostics can include source edits (fix-its); missing function-parameter colons receive an insertion suggestion.
+- Out-of-range decimal floating-point literals are rejected during semantic analysis.
+- Updated weighted estimate: 92.75%, rounded to **93%** (see `PROGRESS.md`).
 
 This is an estimate, not a marketing score. It may go down if a review finds missing acceptance behavior. Passing tests prove only the tested cases, not completeness of the language.
 
@@ -42,7 +45,7 @@ This is an estimate, not a marketing score. It may go down if a review finds mis
 - Tensor function signatures support numeric element types and static or symbolic dimensions, such as `Tensor<Float, [Batch, 784]>`; incompatible shapes are rejected by exact type checking.
 - Integer ranges such as `0..10` are parsed and type-checked; `for item in 0..10` binds `item` to the bound integer type.
 - `else if` chains are parsed into nested conditionals, and each branch participates in non-`Void` return-path checks.
-- Eleven CTest cases include parser recovery, a deterministic malformed-input smoke test, tensor shapes, and record/conversion samples.
+- Twelve CTest cases include parser recovery/fix-its, a deterministic malformed-input smoke test, tensor shapes, and record/conversion samples.
 
 ## Newly Supported Syntax
 

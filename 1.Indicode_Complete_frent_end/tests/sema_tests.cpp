@@ -154,6 +154,8 @@ int main() {
         "wrong_source = to_Int2(\"bad\", checked: true)\n"
         "half_overflow = to_Half(65520, checked: true)\n"
         "float_overflow = to_Float(1e40, checked: true)\n"
+        "float_literal_overflow = 1e999\n"
+        "float_literal_underflow = 1e-9999\n"
         "fractional_integer = to_Int2(2.5, checked: true)\n"
         "mixed_range = 1..2.0\n"
     };
@@ -164,6 +166,7 @@ int main() {
     bool saw_non_record_access = false;
     bool saw_invalid_conversion = false;
     bool saw_conversion_range_error = false;
+    std::size_t floating_literal_range_errors = 0;
     bool saw_invalid_range = false;
     std::size_t conversion_range_errors = 0;
     for (const auto& diagnostic : invalid_records_result.diagnostics) {
@@ -172,6 +175,10 @@ int main() {
         saw_non_record_access = saw_non_record_access || diagnostic.code == "E-SEMA-042";
         saw_invalid_conversion = saw_invalid_conversion || diagnostic.code == "E-SEMA-044";
         saw_conversion_range_error = saw_conversion_range_error || diagnostic.code == "E-SEMA-022";
+        if (diagnostic.code == "E-SEMA-012" &&
+            (diagnostic.message.find("floating-point literal") != std::string::npos)) {
+            ++floating_literal_range_errors;
+        }
         saw_invalid_range = saw_invalid_range || diagnostic.code == "E-SEMA-045";
         if (diagnostic.code == "E-SEMA-022") ++conversion_range_errors;
     }
@@ -180,6 +187,8 @@ int main() {
             "invalid records, member accesses, and integer conversions should be diagnosed");
     require(conversion_range_errors >= 4,
             "integer and floating conversion constants outside the target range should be diagnosed");
+    require(floating_literal_range_errors == 2,
+            "floating literals that overflow or underflow the supported range should be rejected");
     require(saw_invalid_range, "range bounds with mismatched numeric types should be rejected");
 
     const indicode::SourceFile tensor_source{

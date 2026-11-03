@@ -138,7 +138,12 @@ char Lexer::peek(std::size_t distance) const {
 char Lexer::advance() {
     const char value = current();
     ++offset_;
-    ++column_;
+    const auto byte = static_cast<unsigned char>(value);
+    if (value == '\t') {
+        column_ += 4 - ((column_ - 1) % 4);
+    } else if ((byte & 0xc0) != 0x80) {
+        ++column_;
+    }
     return value;
 }
 

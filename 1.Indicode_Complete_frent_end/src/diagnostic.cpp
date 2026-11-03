@@ -140,6 +140,12 @@ std::string format_diagnostic_text(const SourceFile& source, const Diagnostic& d
         : start_offset + utf8_scalar_length(line.text, start_offset);
     const auto end_column = display_column(line.text, same_line_end);
     output << std::string(std::max(std::size_t{1}, end_column > column ? end_column - column : 0), '^');
+    if (diagnostic.fix_it) {
+        output << "\n  help: " << diagnostic.fix_it->message;
+        if (!diagnostic.fix_it->replacement.empty()) {
+            output << " (insert `" << diagnostic.fix_it->replacement << '`' << ')';
+        }
+    }
     return output.str();
 }
 
@@ -161,7 +167,20 @@ std::string format_diagnostics_json(const SourceFile& source,
                << ",\"column\":" << diagnostic.span.start.column
                << "},\"end\":{\"offset\":" << diagnostic.span.end.offset
                << ",\"line\":" << diagnostic.span.end.line
-               << ",\"column\":" << diagnostic.span.end.column << "}}";
+               << ",\"column\":" << diagnostic.span.end.column << "},\"fixIt\":";
+        if (diagnostic.fix_it) {
+            output << "{\"message\":\"" << json_escape(diagnostic.fix_it->message)
+                   << "\",\"replacement\":\"" << json_escape(diagnostic.fix_it->replacement)
+                   << "\",\"start\":{\"offset\":" << diagnostic.fix_it->span.start.offset
+                   << ",\"line\":" << diagnostic.fix_it->span.start.line
+                   << ",\"column\":" << diagnostic.fix_it->span.start.column
+                   << "},\"end\":{\"offset\":" << diagnostic.fix_it->span.end.offset
+                   << ",\"line\":" << diagnostic.fix_it->span.end.line
+                   << ",\"column\":" << diagnostic.fix_it->span.end.column << "}}";
+        } else {
+            output << "null";
+        }
+        output << '}';
     }
     output << ']';
     return output.str();

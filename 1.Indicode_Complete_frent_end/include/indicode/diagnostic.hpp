@@ -2,7 +2,9 @@
 
 #include "indicode/source.hpp"
 
+#include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace indicode {
@@ -12,11 +14,24 @@ enum class DiagnosticSeverity {
     Warning
 };
 
+struct DiagnosticFixIt {
+    SourceSpan span;
+    std::string replacement;
+    std::string message;
+};
+
 struct Diagnostic {
     DiagnosticSeverity severity = DiagnosticSeverity::Error;
     std::string code;
     std::string message;
     SourceSpan span;
+    std::optional<DiagnosticFixIt> fix_it;
+
+    Diagnostic() = default;
+    Diagnostic(DiagnosticSeverity severity, std::string code, std::string message,
+               SourceSpan span, std::optional<DiagnosticFixIt> fix_it = std::nullopt)
+        : severity(severity), code(std::move(code)), message(std::move(message)),
+          span(span), fix_it(std::move(fix_it)) {}
 };
 
 std::string format_diagnostic_text(const SourceFile& source, const Diagnostic& diagnostic);

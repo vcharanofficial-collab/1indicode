@@ -4,6 +4,7 @@
 #include "indicode/diagnostic.hpp"
 #include "indicode/token.hpp"
 
+#include <optional>
 #include <vector>
 
 namespace indicode {
@@ -36,7 +37,8 @@ private:
     bool match_keyword(const char* keyword);
     const Token* consume(TokenKind kind, const char* message);
     const Token* consume_identifier(const char* message);
-    void error(const Token& token, const char* message);
+    void error(const Token& token, const char* message,
+               std::optional<DiagnosticFixIt> fix_it = std::nullopt);
     void skip_separators();
     void synchronize();
     void synchronize_declaration();

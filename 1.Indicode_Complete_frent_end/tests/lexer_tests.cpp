@@ -44,6 +44,22 @@ int main() {
     require(result.tokens.back().kind == indicode::TokenKind::EndOfFile,
             "token stream should end with EOF");
 
+    const indicode::SourceFile columns{"columns.indi", "x = \"\xC3\xA9\" y\nx\t= 1\n"};
+    const auto column_result = indicode::Lexer(columns).lex();
+    const indicode::Token* y_token = nullptr;
+    const indicode::Token* tabbed_equal_token = nullptr;
+    for (const auto& token : column_result.tokens) {
+        if (token.lexeme == "y") y_token = &token;
+        if (token.kind == indicode::TokenKind::Equal && token.span.start.line == 2) {
+            tabbed_equal_token = &token;
+        }
+    }
+    require(column_result.diagnostics.empty() && y_token != nullptr &&
+                y_token->span.start.column == 9,
+            "lexer columns should count a UTF-8 scalar once, not once per encoded byte");
+    require(tabbed_equal_token != nullptr && tabbed_equal_token->span.start.column == 5,
+            "lexer columns should expand tabs to the configured four-column stops");
+
     const indicode::SourceFile malformed{"bad.indi", "value = 1e+\ntext = \"open\n"};
     const auto errors = indicode::Lexer(malformed).lex();
     require(errors.diagnostics.size() == 2,

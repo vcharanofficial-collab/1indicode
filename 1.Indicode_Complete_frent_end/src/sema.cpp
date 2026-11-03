@@ -507,6 +507,13 @@ std::string Analyzer::analyze_expression(Expr& expression) {
         } else if (is_integer_spelling(expression.value) &&
                    expression.value.find_first_of(".eE") != std::string::npos) {
             type = "Float";
+            expression.inferred_type = type;
+            long double value = 0;
+            if (!numeric_literal_value(expression, value)) {
+                add_error("E-SEMA-012", "floating-point literal is outside the supported range",
+                          expression.span);
+                type = error_type;
+            }
         } else {
             std::uint64_t magnitude = 0;
             if (!parse_integer_magnitude(expression.value, magnitude)) {

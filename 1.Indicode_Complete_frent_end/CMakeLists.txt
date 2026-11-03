@@ -56,4 +56,11 @@ if(BUILD_TESTING)
             -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/type_error.indi
             -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_json_diagnostics.cmake
     )
+    add_test(NAME cli_json_parser_fixit
+        COMMAND ${CMAKE_COMMAND}
+            -DINDICODE=$<TARGET_FILE:indicode>
+            -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/missing_parameter_colon.indi
+            -DEXPECT_CODE=E-PARSE-001
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_json_diagnostics.cmake
+    )
 endif()

@@ -107,8 +107,10 @@ const Token* Parser::consume_identifier(const char* message) {
     return consume(TokenKind::Identifier, message);
 }
 
-void Parser::error(const Token& token, const char* message) {
-    result_.diagnostics.push_back({DiagnosticSeverity::Error, "E-PARSE-001", message, token.span});
+void Parser::error(const Token& token, const char* message,
+                   std::optional<DiagnosticFixIt> fix_it) {
+    result_.diagnostics.push_back(
+        {DiagnosticSeverity::Error, "E-PARSE-001", message, token.span, std::move(fix_it)});
 }
 
 void Parser::skip_separators() {
@@ -279,7 +281,13 @@ bool Parser::function_declaration() {
     if (!check(TokenKind::RightParen)) {
         do {
             const auto* parameter_name = consume_identifier("expected parameter name");
-            if (parameter_name == nullptr || consume(TokenKind::Colon, "expected ':' after parameter name") == nullptr) {
+            if (parameter_name == nullptr) {
+                return false;
+            }
+            if (!match(TokenKind::Colon)) {
+                const SourceSpan insertion{parameter_name->span.end, parameter_name->span.end};
+                error(peek(), "expected ':' after parameter name",
+                      DiagnosticFixIt{insertion, ": ", "insert ':' after the parameter name"});
                 return false;
             }
             const auto parameter_type = parse_type();

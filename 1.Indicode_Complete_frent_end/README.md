@@ -27,3 +27,7 @@ ctest --test-dir /tmp/indicode-build --output-on-failure
 `--json-diagnostics` prints machine-readable errors for editor/CI tools. It is an option before the command and source path.
 
 See [docs/PROGRESS.md](docs/PROGRESS.md) for measured progress, [docs/ROADMAP_BEGINNER.md](docs/ROADMAP_BEGINNER.md) for the plain-language roadmap and current syntax examples, and [docs/COMMUNITY_RULES.md](docs/COMMUNITY_RULES.md) for strict contribution rules.
+
+## Production readiness
+
+This is a buildable, tested front-end prototype for the documented language subset, not a production-ready general-purpose compiler. It does not generate LLVM IR or executables and still needs a complete language specification, conformance testing, fuzzing/sanitizer coverage, CI/release practices, and a stable compatibility policy. Do not rely on it for production workloads.

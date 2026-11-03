@@ -6,6 +6,10 @@ Updated: 2026-11-03
 
 This phase builds only the Indicode front end, targeting a validated typed representation that a future LLVM backend can consume. It now includes an initial tensor type and static/symbolic shape-compatibility subset; tensor operations, broadcasting, dynamic shape guards, and device checks are not implemented. LLVM is not downloaded, vendored, or built in this repository. LLVM IR generation, machine-code generation, tensor execution, autodiff runtime/training, and device backends are outside the current phase.
 
+## Production Readiness
+
+This repository is a real, buildable, tested compiler-front-end prototype, but it is **not production-ready** and should not be represented as a deployable general-purpose compiler. The supported grammar and semantics are a small documented subset. There is no LLVM adapter or executable generation, language conformance suite, production CI/release process, fuzzing campaign, sanitizer gate, or compatibility/ABI policy. Use it for development and evaluation of the implemented subset, not as a production compiler.
+
 ## Completion
 
 **Overall front-end completion: 93%**
@@ -61,6 +65,7 @@ Updated weighted estimate: 4.0 + 9.0 + 13.8 + 14.25 + 7.5 + 14.7 + 14.85 + 4.75 
 - Added `start..end` integer range expressions with same-integer-type bounds, `Range<T>` HIR verification, and integer range iteration binding for `for` loops.
 - Added nested `else if` parsing as nested conditional AST/HIR nodes, with return-path analysis across each branch.
 - Added independent HIR verification that non-`Void` functions return on every supported conditional path.
+- Strengthened independent HIR checks to reject duplicate parameter names, argument-label metadata that is not aligned with call operands, and returns outside functions.
 - Aligned diagnostic carets with expanded tabs and UTF-8 scalar columns; terminal-specific wide/combining-character display widths remain out of scope.
 - Added optional diagnostic fix-its with replacement spans, messages, text hints, and JSON output; the parser suggests inserting `: ` after a function parameter name when its colon is missing.
 - Added semantic errors for decimal floating-point literals that overflow or underflow the supported host conversion range.
@@ -89,6 +94,6 @@ LLVM/backend work begins only after these front-end milestones are complete and 
 
 - A fresh out-of-tree CMake configure/build succeeded with GCC 13.3.
 - All 12 CTest cases passed, including parser recovery/robustness, semantic analysis, HIR verification, diagnostics, JSON fix-it CLI integration, and CLI checks for standard, record, and tensor-shape examples.
-- The suite also verifies nested `else if` return coverage, malformed HIR return-path rejection, UTF-8/tab diagnostic caret alignment, and float literal overflow/underflow rejection.
+- The suite also verifies nested `else if` return coverage, malformed HIR return-path rejection, invalid HIR parameter/call/return invariants, UTF-8/tab diagnostic caret alignment, and float literal overflow/underflow rejection.
 - Lexer regression tests confirm that UTF-8 byte offsets and human-facing source columns remain distinct and consistent after tabs and non-ASCII string contents.
 - The verification build was kept outside the project at `/tmp/indicode-progress-build`; no generated build files were added to the repository.

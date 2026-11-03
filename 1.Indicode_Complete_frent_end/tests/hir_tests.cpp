@@ -54,6 +54,30 @@ int main() {
                         [](const auto& diagnostic) { return diagnostic.code == "E-HIR-026"; }),
             "HIR verifier should independently reject a non-Void function without complete return paths");
 
+    auto duplicate_parameter_hir = indicode::lower_to_hir(parsed.program);
+    duplicate_parameter_hir.functions[0].parameters[1].name =
+        duplicate_parameter_hir.functions[0].parameters[0].name;
+    const auto duplicate_parameter_diagnostics = indicode::verify_hir(duplicate_parameter_hir);
+    require(std::any_of(duplicate_parameter_diagnostics.begin(), duplicate_parameter_diagnostics.end(),
+                        [](const auto& diagnostic) { return diagnostic.code == "E-HIR-030"; }),
+            "HIR verifier should reject duplicate parameter names");
+
+    auto misaligned_call_hir = indicode::lower_to_hir(parsed.program);
+    misaligned_call_hir.statements[2]->expression->argument_names.clear();
+    const auto misaligned_call_diagnostics = indicode::verify_hir(misaligned_call_hir);
+    require(std::any_of(misaligned_call_diagnostics.begin(), misaligned_call_diagnostics.end(),
+                        [](const auto& diagnostic) { return diagnostic.code == "E-HIR-031"; }),
+            "HIR verifier should reject call metadata that does not align with arguments");
+
+    auto top_level_return_hir = indicode::lower_to_hir(parsed.program);
+    auto top_level_return = std::make_unique<indicode::HirStmt>();
+    top_level_return->kind = indicode::HirStmtKind::Return;
+    top_level_return_hir.statements.push_back(std::move(top_level_return));
+    const auto top_level_return_diagnostics = indicode::verify_hir(top_level_return_hir);
+    require(std::any_of(top_level_return_diagnostics.begin(), top_level_return_diagnostics.end(),
+                        [](const auto& diagnostic) { return diagnostic.code == "E-HIR-032"; }),
+            "HIR verifier should reject return statements outside functions");
+
     hir.statements[0]->expression->type = "";
     const auto invalid = indicode::verify_hir(hir);
     require(!invalid.empty() && invalid[0].code == "E-HIR-004",

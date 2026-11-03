@@ -243,6 +243,14 @@ std::vector<Diagnostic> verify_hir(const HirProgram& program) {
                                        "parameter has an invalid type", parameter.span});
             }
         }
+        std::unordered_set<std::string> parameter_names;
+        for (const auto& parameter : function.parameters) {
+            if (parameter.name.empty() || !parameter_names.insert(parameter.name).second) {
+                diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-030",
+                                       "function parameters must have unique non-empty names",
+                                       parameter.span});
+            }
+        }
     }
 
     std::function<std::string(const HirExpr&)> verify_expression;
@@ -346,6 +354,11 @@ std::vector<Diagnostic> verify_hir(const HirProgram& program) {
             break;
         }
         case HirExprKind::Call: {
+            if (expression.argument_names.size() != expression.arguments.size()) {
+                diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-031",
+                                       "call argument names must align with call arguments",
+                                       expression.span});
+            }
             std::vector<std::string> argument_types;
             for (const auto& argument : expression.arguments) {
                 argument_types.push_back(verify_expression(*argument));
@@ -489,9 +502,10 @@ std::vector<Diagnostic> verify_hir(const HirProgram& program) {
         return expression.type;
     };
 
-    std::function<void(const std::vector<std::unique_ptr<HirStmt>>&, const std::string&)> verify_statements;
+    std::function<void(const std::vector<std::unique_ptr<HirStmt>>&,
+                       const std::string&, bool)> verify_statements;
     verify_statements = [&](const std::vector<std::unique_ptr<HirStmt>>& statements,
-                            const std::string& return_type) {
+                            const std::string& return_type, bool in_function) {
         for (const auto& statement : statements) {
             const bool needs_expression = statement->kind != HirStmtKind::Return || statement->expression != nullptr;
             std::string value_type;
@@ -517,7 +531,10 @@ std::vector<Diagnostic> verify_hir(const HirProgram& program) {
                 }
                 break;
             case HirStmtKind::Return:
-                if ((statement->expression ? value_type : "Void") != return_type) {
+                if (!in_function) {
+                    diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-032",
+                                           "return statement appears outside a function", statement->span});
+                } else if ((statement->expression ? value_type : "Void") != return_type) {
                     diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-016",
                                            "return type does not match the containing function", statement->span});
                 }
@@ -548,19 +565,19 @@ std::vector<Diagnostic> verify_hir(const HirProgram& program) {
                 break;
             }
             }
-            verify_statements(statement->body, return_type);
-            verify_statements(statement->else_body, return_type);
+            verify_statements(statement->body, return_type, in_function);
+            verify_statements(statement->else_body, return_type, in_function);
         }
     };
 
     for (const auto& function : program.functions) {
-        verify_statements(function.body, function.return_type);
+        verify_statements(function.body, function.return_type, true);
         if (function.return_type != "Void" && !always_returns(function.body)) {
             diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-026",
                                    "non-Void function does not return on every path", function.span});
         }
     }
-    verify_statements(program.statements, "Void");
+    verify_statements(program.statements, "Void", false);
     return diagnostics;
 }
 

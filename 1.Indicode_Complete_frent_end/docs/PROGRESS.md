@@ -4,24 +4,25 @@ Updated: 2026-11-03
 
 ## Scope
 
-This project implements the Indicode compiler front end only. The front end ends at a validated, typed representation and diagnostics. LLVM integration, machine-code generation, runtime, tensors, autodiff, and device backends are not part of this phase.
+This phase builds only the Indicode front end, targeting a validated typed representation that a future LLVM backend can consume. Its planned semantic surface includes the blueprint's tensor type and shape checks, which are not implemented yet. LLVM is not downloaded, vendored, or built in this repository. LLVM IR generation, machine-code generation, tensor execution, autodiff runtime/training, and device backends are outside the current phase.
 
 ## Completion
 
-**Overall front-end completion: 33%**
+**Overall front-end completion: 30%**
 
-The percentage is a coarse engineering estimate across the complete front-end acceptance areas below, not a feature-count claim. A feature is complete only when implemented, tested, and documented.
+The percentage measures progress toward the complete front-end boundary described in the blueprint, not progress toward LLVM itself or the full AI compiler. It is a weighted estimate: each area has a fixed weight, and its completion estimate is based on implemented, tested, documented acceptance behavior. The weighted result is 29.75%, rounded to 30%.
 
-| Area | Status | Notes |
+| Acceptance area | Weight | Area completion | Evidence / remaining work |
 | --- | --- | --- |
-| Project/build foundation | In progress | C++20 and CMake are configured; CI and install packaging remain. |
-| Source model and diagnostics | Started | Source file, byte offsets, line/column positions, and diagnostic records exist; source manager/rendering remain. |
-| Lexer | Started | ASCII identifiers, core keywords/operators, comments, newline separators, numeric/string tokens, and recoverable errors. |
-| Parser and AST | Started | Function declarations, basic statements/blocks, calls, unary/binary expressions, Pratt precedence, and parser recovery diagnostics. |
-| Name resolution | Started | Lexical scopes, variable/function lookup, duplicate-name checks, and unresolved-name diagnostics. |
-| Type checking and semantic validation | Started | Core scalar type inference, exact-match assignments/calls/returns, mutability, conditions, and checked destination-type integer literal ranges. |
-| Typed HIR and verification | Started | AST nodes carry inferred expression types and resolved symbol names; a separate verified HIR remains. |
-| CLI, JSON diagnostics, and integration tests | Started | `check`, `tokens`, `ast`, and `typed` are implemented; JSON diagnostics and broader integration remain. |
+| Project/build foundation | 5% | 80% | C++20, CMake, and CTest work; install/package/CI acceptance remains. |
+| Source manager and diagnostics | 10% | 20% | Source file, spans, and records exist; owned source manager, UTF-8 validation, line mapping, rich rendering, and JSON output remain. |
+| Lexer | 15% | 35% | Initial ASCII identifiers, selected keywords/operators, comments, newline, number/string tokens and errors; full Unicode, literals, escapes, and trivia remain. |
+| Parser and AST | 15% | 35% | Functions, basic statements, blocks, calls, Pratt operators and a text printer; full grammar, recovery, AST snapshots, for-each, member/index, and named args remain. |
+| Name resolution | 10% | 30% | Local scopes and basic variable/function lookup; declaration phases, globals/modules/imports/visibility and robust symbol identities remain. |
+| Type checking and semantic validation | 15% | 30% | Core scalar inference, same-type operations, mutability, signatures, returns and integer ranges; full conversions, control-flow/effect/ownership and tensor shape rules remain. |
+| Typed HIR and verification | 15% | 0% | Current types annotate AST nodes; separate typed HIR, lowering, and IR verifier are not implemented. |
+| CLI and diagnostics tooling | 5% | 35% | `check`, `tokens`, `ast`, `typed` plus plain diagnostics; JSON diagnostics, editor interfaces, and stable source snippets/fix-its remain. |
+| Tests, docs, and integration | 10% | 40% | Five CTest cases and a sample; broad conformance, fuzz/property tests, and CI remain. |
 
 ## Work completed
 
@@ -38,14 +39,16 @@ The percentage is a coarse engineering estimate across the complete front-end ac
 - Added a source-oriented AST/typed-tree printer and documented local build and command usage.
 - Added context-typed integer literals with range checks for Byte/U8, Int2/UInt2, Int/UInt, and Long/ULong; signed minimum values are checked without overflow.
 - Added `examples/hello.indi` as the first runnable end-to-end front-end sample.
+- The last verified CLI executable measured 352,136 bytes before build artifacts were cleaned; this is not a size guarantee for future builds or a runtime-memory limit.
 
 ## Current limitations
 
 - Identifiers are ASCII-only. UTF-8 bytes are retained in strings, but Unicode validation and Unicode identifier rules are not implemented.
 - Numeric bases, digit separators, suffixes, complete escape validation, and block comments are not implemented.
 - Semantic checking is a core subset; numeric widening/conversions, full return-flow analysis, overloads, generics, module resolution, and complete diagnostics rendering remain.
-- Parser coverage is still a subset: for-each loops, member/index expressions, named arguments, complete newline rules, AST printing, and full grammar recovery remain.
+- Parser coverage is still a subset: for-each loops, member/index expressions, named arguments, complete newline rules, AST printer snapshot tests, and full grammar recovery remain.
 - Numeric conversion is exact-type-only outside contextual integer literals; floating-point range/precision checks and the complete conversion policy remain.
+- A separate typed HIR and verifier are required before the front end can be called ready for a future LLVM adapter; current inferred types are attached to AST nodes only.
 
 ## Milestones
 
@@ -56,9 +59,10 @@ The percentage is a coarse engineering estimate across the complete front-end ac
 5. **Typed HIR:** lower valid source to typed HIR and verify invariants.
 6. **Front-end CLI and release checks:** provide `check`, `tokens`, `ast`, and `typed`; add JSON diagnostics, integration tests, and usage docs.
 
-LLVM/backend work begins only after these front-end milestones are complete and accepted.
+LLVM/backend work begins only after these front-end milestones are complete and accepted. The front end is being designed to connect to LLVM later without requiring the LLVM framework to be downloaded into this repository now.
 
 ## Latest verification
 
-- `cmake -S . -B build` and `cmake --build build` succeed with GCC 13.3.
-- `ctest --test-dir build --output-on-failure` passes all 5 tests: lexer, parser, semantic analysis, valid CLI check, and expected rejection of a type error.
+- A fresh out-of-tree CMake configure/build succeeded with GCC 13.3.
+- All 5 CTest cases passed: lexer, parser, semantic analysis, valid CLI check, and expected rejection of a type error; the documented example also passes `indicode check`.
+- The temporary verification build and the project's generated `build/` directory were removed after validation. No compiled artifacts remain in the project folder.

@@ -38,7 +38,7 @@ This is an estimate, not a marketing score. It may go down if a review finds mis
 - The compiler lowers checked AST into project-owned typed HIR (High-level Intermediate Representation: a simpler, explicitly typed form of the program).
 - The HIR verifier checks required type annotations, expression/operator types, function calls, and return types.
 - Lists can be created, indexed, and iterated with `for`; text can also be iterated/indexed as `Char` values.
-- String contents are UTF-8 validated; supported escapes include Unicode scalar escapes such as `\u{e9}`. A single Unicode scalar infers `Char`, more infer `Text`.
+- UTF-8 is validated throughout the source, including strings and comments; supported string escapes include Unicode scalar escapes such as `\u{e9}`. A single Unicode scalar infers `Char`, more infer `Text`.
 - `indicode check`, `tokens`, `ast`, `typed`, and opt-in `--json-diagnostics` work for the current subset.
 - Integer literals support `0b` binary, `0o` octal, `0x` hexadecimal, and `_` digit separators; malformed forms are rejected.
 - Function calls accept named arguments such as `add(b: 22, a: 20)` and reject unknown, duplicate, missing, or out-of-order arguments.

@@ -20,7 +20,7 @@ The percentage measures progress toward the compiler front-end boundary describe
 | --- | --- | --- |
 | Project/build foundation | 5% | 95% | C++20, CMake, CTest, install/export package config, public headers and a separately configured/compiled package consumer; CI/release acceptance remains. |
 | Source manager and diagnostics | 10% | 90% | Source spans, caret rendering aligned across tabs and UTF-8 scalar columns, JSON escaping, and fix-it edits with source spans; owned source manager, terminal display-width handling, broad fix-it coverage, and a stable versioned JSON schema remain. |
-| Lexer | 15% | 92% | ASCII identifiers, UTF-8 strings, escapes, binary/octal/hex integers, digit separators, nested block comments with newline preservation, and scalar/tab-aware source columns; Unicode identifiers, suffix policy, trivia preservation, and complete numeric grammar remain. |
+| Lexer | 15% | 92% | ASCII identifiers, UTF-8 source validation, strings/escapes, binary/octal/hex integers, digit separators, nested block comments with newline preservation, and scalar/tab-aware source columns; Unicode identifiers, suffix policy, trivia preservation, and complete numeric grammar remain. |
 | Parser and AST | 15% | 95% | Functions, blocks, calls, precedence, typed lists, indexing, for-each, named arguments, records/member access, tensor element/shape types, integer ranges, nested `else if`, and a missing-parameter-colon fix-it; full grammar recovery and AST snapshots remain. |
 | Name resolution | 10% | 90% | Lexical scopes, global/function/parameter/loop bindings, stable local symbol IDs, shadowing, and HIR revalidation of binding identity; modules/imports and stable function/type identities remain. |
 | Type checking and semantic validation | 15% | 98% | Scalar/radix integer inference, integer and floating literal range checks, checked numeric conversions, record construction/field types, tensor element/shape compatibility, integer range bounds, indexing, nested conditional return analysis, loops and mutability; tensor operations, ownership/effects and full conversion policies remain. |
@@ -70,6 +70,7 @@ Updated weighted estimate: 4.75 + 9.0 + 13.8 + 14.25 + 9.0 + 14.7 + 14.85 + 4.75
 - Added optional diagnostic fix-its with replacement spans, messages, text hints, and JSON output; the parser suggests inserting `: ` after a function parameter name when its colon is missing.
 - Added semantic errors for decimal floating-point literals that overflow or underflow the supported host conversion range.
 - Lexer source columns now count valid UTF-8 continuation bytes as part of one scalar and expand tabs to four-column stops; byte offsets remain unchanged for slicing and edits.
+- The lexer rejects malformed UTF-8 in line and block comments as well as strings and other source tokens.
 - Added stable IDs for local variables, parameters, and loop bindings through semantic analysis and AST-to-HIR lowering; HIR printing exposes those IDs for backend inspection.
 - HIR verification now independently checks lexical name visibility, matching symbol identity and type, immutable assignments, duplicate declarations, loop scope boundaries, and global bindings visible from functions.
 - Added CMake install/export rules, a versioned package config, and a CTest consumer that installs the library, configures a separate CMake project, links `indicode::frontend`, and runs it.
@@ -77,7 +78,7 @@ Updated weighted estimate: 4.75 + 9.0 + 13.8 + 14.25 + 9.0 + 14.7 + 14.85 + 4.75
 
 ## Current limitations
 
-- Identifiers are ASCII-only. UTF-8 is validated in string contents, but Unicode identifier rules and full Unicode display-column mapping are not implemented.
+- Identifiers are ASCII-only. UTF-8 source sequences are validated, but Unicode identifier rules and full Unicode display-column mapping are not implemented.
 - Numeric suffixes, raw strings, and the complete string escape repertoire remain incomplete.
 - Semantic checking is a core subset; conversions require explicit checked mode and only basic static tensor shape equality is implemented. Numeric widening, tensor operations/broadcasting/device checks, exhaustive control-flow analysis, overloads, generics, module resolution, and complete diagnostics rendering remain.
 - Parser coverage is still a subset: complete newline rules, AST printer snapshot tests, and full grammar recovery remain. Range endpoint inclusivity and runtime iteration behavior are not defined because this front end does not execute programs.

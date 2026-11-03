@@ -198,7 +198,7 @@ void Lexer::scan_token() {
         return;
     case '#':
         while (!at_end() && current() != '\n' && current() != '\r') {
-            advance();
+            scan_comment_character();
         }
         return;
     case '(': add_token(TokenKind::LeftParen, start); return;
@@ -424,6 +424,24 @@ void Lexer::scan_string(SourceLocation start) {
     add_token(valid ? TokenKind::StringLiteral : TokenKind::Invalid, start);
 }
 
+void Lexer::scan_comment_character() {
+    if (static_cast<unsigned char>(current()) < 0x80) {
+        advance();
+        return;
+    }
+
+    const auto start = location();
+    const auto length = utf8_sequence_length(source_.contents, offset_);
+    if (length == 0) {
+        advance();
+        add_error("E-LEX-006", "invalid UTF-8 sequence in comment", start);
+        return;
+    }
+    for (std::size_t index = 0; index < length; ++index) {
+        advance();
+    }
+}
+
 void Lexer::scan_block_comment(SourceLocation start) {
     std::size_t depth = 1;
     while (!at_end() && depth > 0) {
@@ -445,7 +463,7 @@ void Lexer::scan_block_comment(SourceLocation start) {
             column_ = 1;
             result_.tokens.push_back({TokenKind::Newline, "\n", {newline_start, location()}});
         } else {
-            advance();
+            scan_comment_character();
         }
     }
     if (depth != 0) {

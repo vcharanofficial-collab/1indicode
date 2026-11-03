@@ -82,6 +82,16 @@ int main() {
     }
     require(saw_utf8_error, "malformed UTF-8 in a string should be diagnosed");
 
+    const indicode::SourceFile invalid_comment_utf8{
+        "invalid_comment_utf8.indi",
+        std::string("# line ") + "\xC3" + "(\n/* block " + "\xFF" + " */\n"
+    };
+    const auto invalid_comment_result = indicode::Lexer(invalid_comment_utf8).lex();
+    require(invalid_comment_result.diagnostics.size() == 2 &&
+                invalid_comment_result.diagnostics[0].code == "E-LEX-006" &&
+                invalid_comment_result.diagnostics[1].code == "E-LEX-006",
+            "malformed UTF-8 in line and block comments should be diagnosed");
+
     const indicode::SourceFile invalid_escape{"invalid_escape.indi", "word = \"\\q\"\n"};
     const auto invalid_escape_result = indicode::Lexer(invalid_escape).lex();
     require(!invalid_escape_result.diagnostics.empty() &&

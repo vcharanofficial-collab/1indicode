@@ -249,6 +249,7 @@ SemanticResult Analyzer::analyze(Program& program) {
     functions_.clear();
     records_.clear();
     scopes_.clear();
+    next_symbol_id_ = 1;
     push_scope();
 
     for (const auto& record : program.records) {
@@ -301,8 +302,9 @@ SemanticResult Analyzer::analyze(Program& program) {
         push_scope();
         in_function_ = true;
         current_return_type_ = function.return_type.empty() ? "Void" : function.return_type;
-        for (const auto& parameter : function.parameters) {
-            declare_binding(parameter.name, {parameter.type, false, parameter.span}, parameter.span);
+        for (auto& parameter : function.parameters) {
+            parameter.resolved_symbol_id =
+                declare_binding(parameter.name, {parameter.type, false, parameter.span}, parameter.span);
         }
         analyze_statements(function.body);
         if (current_return_type_ != "Void" && !always_returns(function.body)) {
@@ -363,12 +365,15 @@ Analyzer::Binding* Analyzer::find_binding(const std::string& name) {
     return nullptr;
 }
 
-void Analyzer::declare_binding(const std::string& name, Binding binding, SourceSpan span) {
+std::uint64_t Analyzer::declare_binding(const std::string& name, Binding binding, SourceSpan span) {
     if (scopes_.back().contains(name)) {
         add_error("E-SEMA-004", "name is already declared in this scope", span);
-        return;
+        return 0;
     }
+    binding.symbol_id = next_symbol_id_++;
+    const auto symbol_id = binding.symbol_id;
     scopes_.back().emplace(name, std::move(binding));
+    return symbol_id;
 }
 
 void Analyzer::analyze_statements(std::vector<std::unique_ptr<Stmt>>& statements) {
@@ -406,7 +411,8 @@ void Analyzer::analyze_statement(Stmt& statement) {
         }
             const auto resolved_type = has_explicit_type ? type : value_type;
             statement.declared_type = resolved_type;
-            declare_binding(statement.name, {resolved_type, statement.mutable_binding, statement.span}, statement.span);
+            statement.resolved_symbol_id = declare_binding(
+                statement.name, {resolved_type, statement.mutable_binding, statement.span}, statement.span);
         break;
     }
     case StmtKind::Assignment: {
@@ -414,8 +420,10 @@ void Analyzer::analyze_statement(Stmt& statement) {
         auto* binding = find_binding(statement.name);
         if (binding == nullptr) {
             statement.declared_type = value_type;
-            declare_binding(statement.name, {value_type, true, statement.span}, statement.span);
+            statement.resolved_symbol_id =
+                declare_binding(statement.name, {value_type, true, statement.span}, statement.span);
         } else {
+            statement.resolved_symbol_id = binding->symbol_id;
             statement.declared_type = binding->type;
             if (!binding->mutable_binding) {
                 add_error("E-SEMA-006", "cannot assign to an immutable binding", statement.span);
@@ -488,7 +496,8 @@ void Analyzer::analyze_statement(Stmt& statement) {
         }
         statement.declared_type = element_type;
         push_scope();
-        declare_binding(statement.name, {element_type, false, statement.span}, statement.span);
+        statement.resolved_symbol_id =
+            declare_binding(statement.name, {element_type, false, statement.span}, statement.span);
         analyze_statements(statement.body);
         pop_scope();
         break;
@@ -532,6 +541,7 @@ std::string Analyzer::analyze_expression(Expr& expression) {
         } else {
             type = binding->type;
             expression.resolved_symbol = expression.value;
+            expression.resolved_symbol_id = binding->symbol_id;
         }
         break;
     }

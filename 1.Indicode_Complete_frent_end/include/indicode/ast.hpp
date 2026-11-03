@@ -2,6 +2,7 @@
 
 #include "indicode/source.hpp"
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -26,6 +27,7 @@ struct Expr {
     std::string value;
     std::string inferred_type;
     std::string resolved_symbol;
+    std::uint64_t resolved_symbol_id = 0;
     std::unique_ptr<Expr> left;
     std::unique_ptr<Expr> right;
     std::vector<std::unique_ptr<Expr>> arguments;
@@ -48,6 +50,7 @@ struct Stmt {
     SourceSpan span;
     std::string name;
     std::string declared_type;
+    std::uint64_t resolved_symbol_id = 0;
     bool mutable_binding = true;
     std::unique_ptr<Expr> expression;
     std::vector<std::unique_ptr<Stmt>> body;
@@ -58,6 +61,7 @@ struct Parameter {
     std::string name;
     std::string type;
     SourceSpan span;
+    std::uint64_t resolved_symbol_id = 0;
 };
 
 struct FunctionDecl {

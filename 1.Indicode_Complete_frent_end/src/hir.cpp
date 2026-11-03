@@ -18,6 +18,7 @@ std::unique_ptr<HirExpr> lower_expression(const Expr& expression) {
     result->span = expression.span;
     result->value = expression.value;
     result->symbol = expression.resolved_symbol;
+    result->symbol_id = expression.resolved_symbol_id;
     if (expression.left) {
         result->left = lower_expression(*expression.left);
     }
@@ -40,6 +41,7 @@ std::unique_ptr<HirStmt> lower_statement(const Stmt& statement) {
     result->span = statement.span;
     result->name = statement.name;
     result->type = statement.declared_type;
+    result->symbol_id = statement.resolved_symbol_id;
     result->mutable_binding = statement.mutable_binding;
     if (statement.expression) {
         result->expression = lower_expression(*statement.expression);
@@ -193,7 +195,8 @@ HirProgram lower_to_hir(const Program& program) {
         lowered.return_type = function.return_type.empty() ? "Void" : function.return_type;
         lowered.span = function.span;
         for (const auto& parameter : function.parameters) {
-            lowered.parameters.push_back({parameter.name, parameter.type, parameter.span});
+            lowered.parameters.push_back(
+                {parameter.name, parameter.type, parameter.span, parameter.resolved_symbol_id});
         }
         lower_statements(function.body, lowered.body);
         result.functions.push_back(std::move(lowered));
@@ -243,15 +246,33 @@ std::vector<Diagnostic> verify_hir(const HirProgram& program) {
                                        "parameter has an invalid type", parameter.span});
             }
         }
-        std::unordered_set<std::string> parameter_names;
-        for (const auto& parameter : function.parameters) {
-            if (parameter.name.empty() || !parameter_names.insert(parameter.name).second) {
-                diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-030",
-                                       "function parameters must have unique non-empty names",
-                                       parameter.span});
-            }
-        }
     }
+
+    struct HirBinding {
+        std::string type;
+        bool mutable_binding = false;
+        std::uint64_t symbol_id = 0;
+    };
+    std::vector<std::unordered_map<std::string, HirBinding>> binding_scopes(1);
+    std::unordered_set<std::uint64_t> declared_symbol_ids;
+    auto declare_hir_binding = [&](const std::string& name, HirBinding binding,
+                                   SourceSpan span, const char* duplicate_code) {
+        if (name.empty() || binding.symbol_id == 0 ||
+            !declared_symbol_ids.insert(binding.symbol_id).second ||
+            !binding_scopes.back().emplace(name, std::move(binding)).second) {
+            diagnostics.push_back({DiagnosticSeverity::Error, duplicate_code,
+                                   "HIR binding must have a unique name and symbol identity in scope", span});
+            return false;
+        }
+        return true;
+    };
+    auto find_binding = [&](const std::string& name) -> const HirBinding* {
+        for (auto scope = binding_scopes.rbegin(); scope != binding_scopes.rend(); ++scope) {
+            const auto found = scope->find(name);
+            if (found != scope->end()) return &found->second;
+        }
+        return nullptr;
+    };
 
     std::function<std::string(const HirExpr&)> verify_expression;
     verify_expression = [&](const HirExpr& expression) -> std::string {
@@ -271,12 +292,19 @@ std::vector<Diagnostic> verify_hir(const HirProgram& program) {
         };
 
         switch (expression.kind) {
-        case HirExprKind::Name:
-            if (expression.symbol.empty()) {
+        case HirExprKind::Name: {
+            const auto* binding = find_binding(expression.symbol);
+            if (expression.symbol.empty() || expression.symbol_id == 0 || binding == nullptr) {
                 diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-006",
-                                       "name expression has no resolved symbol", expression.span});
+                                       "name expression has no resolved binding", expression.span});
+            } else if (binding->symbol_id != expression.symbol_id ||
+                       binding->type != expression.type) {
+                diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-033",
+                                       "name expression identity or type does not match its resolved binding",
+                                       expression.span});
             }
             break;
+        }
         case HirExprKind::Literal:
             if (expression.type == "Void") {
                 diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-007",
@@ -517,19 +545,43 @@ std::vector<Diagnostic> verify_hir(const HirProgram& program) {
             }
 
             switch (statement->kind) {
-            case HirStmtKind::Variable:
+            case HirStmtKind::Variable: {
                 if (!is_known_type(statement->type, record_names) || value_type != statement->type) {
                     diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-014",
                                            "variable initializer does not match its declared HIR type", statement->span});
                 }
+                declare_hir_binding(statement->name,
+                    HirBinding{statement->type, statement->mutable_binding, statement->symbol_id},
+                    statement->span, "E-HIR-034");
                 break;
-            case HirStmtKind::Assignment:
-                if (statement->name.empty() || !is_known_type(statement->type, record_names) ||
-                    value_type != statement->type) {
+            }
+            case HirStmtKind::Assignment: {
+                const auto* binding = find_binding(statement->name);
+                if (binding == nullptr) {
+                    if (statement->name.empty() || statement->symbol_id == 0 ||
+                        !is_known_type(statement->type, record_names) ||
+                        value_type != statement->type) {
+                        diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-015",
+                                               "assignment does not match its resolved HIR binding type",
+                                               statement->span});
+                    } else {
+                        declare_hir_binding(statement->name,
+                            HirBinding{statement->type, true, statement->symbol_id},
+                            statement->span, "E-HIR-034");
+                    }
+                } else if (binding->symbol_id != statement->symbol_id) {
+                    diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-033",
+                                           "assignment symbol identity does not match its resolved binding",
+                                           statement->span});
+                } else if (!binding->mutable_binding) {
+                    diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-035",
+                                           "assignment targets an immutable HIR binding", statement->span});
+                } else if (binding->type != statement->type || value_type != binding->type) {
                     diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-015",
                                            "assignment does not match its resolved HIR binding type", statement->span});
                 }
                 break;
+            }
             case HirStmtKind::Return:
                 if (!in_function) {
                     diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-032",
@@ -562,22 +614,48 @@ std::vector<Diagnostic> verify_hir(const HirProgram& program) {
                                            "for-each binding does not match its iterable element type",
                                            statement->span});
                 }
+                binding_scopes.emplace_back();
+                declare_hir_binding(statement->name,
+                    HirBinding{statement->type, false, statement->symbol_id},
+                    statement->span, "E-HIR-034");
+                verify_statements(statement->body, return_type, in_function);
+                binding_scopes.pop_back();
                 break;
             }
             }
-            verify_statements(statement->body, return_type, in_function);
-            verify_statements(statement->else_body, return_type, in_function);
+            if (statement->kind == HirStmtKind::If) {
+                binding_scopes.emplace_back();
+                verify_statements(statement->body, return_type, in_function);
+                binding_scopes.pop_back();
+                if (!statement->else_body.empty()) {
+                    binding_scopes.emplace_back();
+                    verify_statements(statement->else_body, return_type, in_function);
+                    binding_scopes.pop_back();
+                }
+            } else if (statement->kind == HirStmtKind::While ||
+                       statement->kind == HirStmtKind::Repeat) {
+                binding_scopes.emplace_back();
+                verify_statements(statement->body, return_type, in_function);
+                binding_scopes.pop_back();
+            }
         }
     };
 
+    verify_statements(program.statements, "Void", false);
     for (const auto& function : program.functions) {
+        binding_scopes.emplace_back();
+        for (const auto& parameter : function.parameters) {
+            declare_hir_binding(parameter.name,
+                HirBinding{parameter.type, false, parameter.symbol_id},
+                parameter.span, "E-HIR-030");
+        }
         verify_statements(function.body, function.return_type, true);
         if (function.return_type != "Void" && !always_returns(function.body)) {
             diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-026",
                                    "non-Void function does not return on every path", function.span});
         }
+        binding_scopes.pop_back();
     }
-    verify_statements(program.statements, "Void", false);
     return diagnostics;
 }
 
@@ -587,7 +665,7 @@ std::string print_hir(const HirProgram& program) {
     print_expression = [&](const HirExpr& expression) {
         switch (expression.kind) {
         case HirExprKind::Name:
-            output << '%' << expression.symbol << ':' << expression.type;
+            output << '%' << expression.symbol << '#' << expression.symbol_id << ':' << expression.type;
             break;
         case HirExprKind::Literal:
             output << expression.value << ':' << expression.type;
@@ -651,12 +729,13 @@ std::string print_hir(const HirProgram& program) {
             switch (statement->kind) {
             case HirStmtKind::Variable:
                 output << (statement->mutable_binding ? "var " : "let ") << '%' << statement->name
-                       << ": " << statement->type << " = ";
+                       << '#' << statement->symbol_id << ": " << statement->type << " = ";
                 print_expression(*statement->expression);
                 output << '\n';
                 break;
             case HirStmtKind::Assignment:
-                output << '%' << statement->name << ": " << statement->type << " = ";
+                output << '%' << statement->name << '#' << statement->symbol_id
+                       << ": " << statement->type << " = ";
                 print_expression(*statement->expression);
                 output << '\n';
                 break;
@@ -690,7 +769,8 @@ std::string print_hir(const HirProgram& program) {
                 print_statements(statement->body, depth + 1);
                 break;
             case HirStmtKind::ForEach:
-                output << "for %" << statement->name << ": " << statement->type << " in ";
+                output << "for %" << statement->name << '#' << statement->symbol_id
+                       << ": " << statement->type << " in ";
                 print_expression(*statement->expression);
                 output << '\n';
                 print_statements(statement->body, depth + 1);
@@ -710,7 +790,8 @@ std::string print_hir(const HirProgram& program) {
         output << "func @" << function.name << '(';
         for (std::size_t index = 0; index < function.parameters.size(); ++index) {
             if (index != 0) output << ", ";
-            output << '%' << function.parameters[index].name << ": " << function.parameters[index].type;
+            output << '%' << function.parameters[index].name << '#'
+                   << function.parameters[index].symbol_id << ": " << function.parameters[index].type;
         }
         output << ") -> " << function.return_type << '\n';
         print_statements(function.body, 1);

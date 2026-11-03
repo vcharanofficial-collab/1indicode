@@ -10,9 +10,9 @@ LLVM is a large, separate compiler framework. This project does **not** download
 
 The PDF is a blueprint, not a list of features already completed. Its 777 concepts are a long-term catalogue, not 777 built-in types or a promise to implement every idea immediately.
 
-## Current Overall Progress: 93%
+## Current Overall Progress: 95%
 
-This percentage means estimated completion of the **front-end work needed before a future LLVM adapter**. It does not mean 92% of LLVM, machine-code generation, a GPU compiler, or the AI runtime is complete.
+This percentage means estimated completion of the **front-end work needed before a future LLVM adapter**. It does not mean 95% of LLVM, machine-code generation, a GPU compiler, or the AI runtime is complete.
 
 The estimate uses the weighted acceptance areas in `PROGRESS.md`:
 
@@ -22,7 +22,9 @@ The estimate uses the weighted acceptance areas in `PROGRESS.md`:
 - Lexer columns also count UTF-8 scalars rather than encoded bytes and expand tabs to four-column stops; offsets remain byte-based.
 - JSON diagnostics can include source edits (fix-its); missing function-parameter colons receive an insertion suggestion.
 - Out-of-range decimal floating-point literals are rejected during semantic analysis.
-- Updated weighted estimate: 92.75%, rounded to **93%** (see `PROGRESS.md`).
+- Local variables, parameters, and loop bindings receive stable IDs that are checked through HIR lowering and independent HIR verification.
+- The library can be installed and used by a separate CMake consumer project.
+- Updated weighted estimate: **95.00%** (see `PROGRESS.md`).
 
 This is an estimate, not a marketing score. It may go down if a review finds missing acceptance behavior. Passing tests prove only the tested cases, not completeness of the language.
 
@@ -45,7 +47,7 @@ This is an estimate, not a marketing score. It may go down if a review finds mis
 - Tensor function signatures support numeric element types and static or symbolic dimensions, such as `Tensor<Float, [Batch, 784]>`; incompatible shapes are rejected by exact type checking.
 - Integer ranges such as `0..10` are parsed and type-checked; `for item in 0..10` binds `item` to the bound integer type.
 - `else if` chains are parsed into nested conditionals, and each branch participates in non-`Void` return-path checks.
-- Twelve CTest cases include parser recovery/fix-its, a deterministic malformed-input smoke test, tensor shapes, and record/conversion samples.
+- Thirteen CTest cases include parser recovery/fix-its, HIR symbol/scope checks, an installed-package consumer, a deterministic malformed-input smoke test, tensor shapes, and record/conversion samples.
 
 ## Newly Supported Syntax
 
@@ -143,7 +145,7 @@ The current grammar does not yet provide a type annotation syntax for an empty l
 | 2. Source and lexer | Started | Read characters and recognize names, numbers, strings, punctuation, and errors. | Unicode identifiers, numeric suffixes, raw/block comments, and full source display-column mapping. |
 | 3. Parser and AST | Started | Recognize the language's grammar and record its structure. | Ranges, complete newline rules, AST golden tests, full recovery. |
 | 4. Names and types | Started | Decide what names refer to and whether operations use compatible types. | Modules, imports, conversions, overflow, ownership/effects, tensor shapes, and negative diagnostics. |
-| 5. Typed HIR | **Started; more core syntax implemented** | Convert checked source into our own typed representation. | More language coverage, stable IDs, effects/conversions, verifier invariants, serialization/versioning. |
+| 5. Typed HIR | **Core subset implemented** | Convert checked source into our own typed representation. | More language coverage, stable function/type IDs, effects/conversions, serialization/versioning, and broader verifier invariants. |
 | 6. Diagnostics and tools | Started | Make errors useful to people and editors. | JSON schema stability, fix-its, editor interfaces, and complete recovery diagnostics. |
 | 7. Front-end acceptance | Not complete | Prove the documented front-end subset works reliably. | Conformance suite, fuzz/property tests, sanitizers, CI, docs, and repeatable clean builds. |
 | 8. Optional LLVM adapter | Not started | Connect verified Indicode HIR to an external LLVM installation. | Separate opt-in adapter, no vendored LLVM, backend integration tests, documented external setup. |

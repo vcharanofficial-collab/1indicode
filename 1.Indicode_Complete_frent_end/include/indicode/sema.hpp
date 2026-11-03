@@ -3,6 +3,7 @@
 #include "indicode/ast.hpp"
 #include "indicode/diagnostic.hpp"
 
+#include <cstdint>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -22,6 +23,7 @@ private:
         std::string type;
         bool mutable_binding;
         SourceSpan declaration_span;
+        std::uint64_t symbol_id = 0;
     };
 
     struct FunctionSignature {
@@ -36,6 +38,7 @@ private:
     std::vector<Diagnostic> diagnostics_;
     std::string current_return_type_ = "Void";
     bool in_function_ = false;
+    std::uint64_t next_symbol_id_ = 1;
 
     void add_error(const char* code, const char* message, SourceSpan span);
     bool is_known_type(const std::string& type) const;
@@ -43,7 +46,7 @@ private:
     void push_scope();
     void pop_scope();
     Binding* find_binding(const std::string& name);
-    void declare_binding(const std::string& name, Binding binding, SourceSpan span);
+    std::uint64_t declare_binding(const std::string& name, Binding binding, SourceSpan span);
     void analyze_statements(std::vector<std::unique_ptr<Stmt>>& statements);
     void analyze_statement(Stmt& statement);
     std::string analyze_expression(Expr& expression);

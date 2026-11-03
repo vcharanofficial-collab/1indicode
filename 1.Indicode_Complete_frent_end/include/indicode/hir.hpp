@@ -3,6 +3,7 @@
 #include "indicode/ast.hpp"
 #include "indicode/diagnostic.hpp"
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -27,6 +28,7 @@ struct HirExpr {
     SourceSpan span;
     std::string value;
     std::string symbol;
+    std::uint64_t symbol_id = 0;
     std::unique_ptr<HirExpr> left;
     std::unique_ptr<HirExpr> right;
     std::vector<std::unique_ptr<HirExpr>> arguments;
@@ -49,6 +51,7 @@ struct HirStmt {
     SourceSpan span;
     std::string name;
     std::string type;
+    std::uint64_t symbol_id = 0;
     bool mutable_binding = true;
     std::unique_ptr<HirExpr> expression;
     std::vector<std::unique_ptr<HirStmt>> body;
@@ -59,6 +62,7 @@ struct HirParameter {
     std::string name;
     std::string type;
     SourceSpan span;
+    std::uint64_t symbol_id = 0;
 };
 
 struct HirFunction {

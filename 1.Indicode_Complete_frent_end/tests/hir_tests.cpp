@@ -24,6 +24,7 @@ int main() {
         "hir.indi",
         "function add(a: Int, b: Int) -> Int { return a + b }\n"
         "List<Int> empty = []\n"
+        "let fixed: Int = 1\n"
         "items = [20, 22]\n"
         "answer = add(b: items[1], a: items[0])\n"
         "for item in items { say(item) }\n"
@@ -36,7 +37,7 @@ int main() {
     require(semantic.diagnostics.empty(), "HIR fixture should pass semantic checks");
 
     auto hir = indicode::lower_to_hir(parsed.program);
-    require(hir.functions.size() == 1 && hir.statements.size() == 4,
+    require(hir.functions.size() == 1 && hir.statements.size() == 5,
             "lowering should preserve function and top-level statement structure");
     require(indicode::verify_hir(hir).empty(), "lowered typed HIR should verify");
     const auto printed = indicode::print_hir(hir);
@@ -44,8 +45,9 @@ int main() {
                 printed.find("call @add") != std::string::npos &&
                 printed.find("b: ") != std::string::npos &&
                 printed.find("list<List<Int>>") != std::string::npos &&
-                printed.find("for %item: Int in") != std::string::npos,
-            "typed HIR printer should show functions, collections, loops, and types");
+                printed.find("for %item#") != std::string::npos &&
+                printed.find("func @add(%a#") != std::string::npos,
+            "typed HIR printer should show stable symbol IDs with functions, collections, loops, and types");
 
     auto missing_return_hir = indicode::lower_to_hir(parsed.program);
     missing_return_hir.functions[0].body.clear();
@@ -63,7 +65,7 @@ int main() {
             "HIR verifier should reject duplicate parameter names");
 
     auto misaligned_call_hir = indicode::lower_to_hir(parsed.program);
-    misaligned_call_hir.statements[2]->expression->argument_names.clear();
+    misaligned_call_hir.statements[3]->expression->argument_names.clear();
     const auto misaligned_call_diagnostics = indicode::verify_hir(misaligned_call_hir);
     require(std::any_of(misaligned_call_diagnostics.begin(), misaligned_call_diagnostics.end(),
                         [](const auto& diagnostic) { return diagnostic.code == "E-HIR-031"; }),
@@ -77,6 +79,42 @@ int main() {
     require(std::any_of(top_level_return_diagnostics.begin(), top_level_return_diagnostics.end(),
                         [](const auto& diagnostic) { return diagnostic.code == "E-HIR-032"; }),
             "HIR verifier should reject return statements outside functions");
+
+    auto unknown_name_hir = indicode::lower_to_hir(parsed.program);
+    unknown_name_hir.statements[3]->expression->arguments[0]->left->symbol = "missing";
+    const auto unknown_name_diagnostics = indicode::verify_hir(unknown_name_hir);
+    require(std::any_of(unknown_name_diagnostics.begin(), unknown_name_diagnostics.end(),
+                        [](const auto& diagnostic) { return diagnostic.code == "E-HIR-006"; }),
+            "HIR verifier should reject names that are not bound in the current lexical scope");
+
+    auto immutable_assignment_hir = indicode::lower_to_hir(parsed.program);
+    auto immutable_assignment = std::make_unique<indicode::HirStmt>();
+    immutable_assignment->kind = indicode::HirStmtKind::Assignment;
+    immutable_assignment->name = "fixed";
+    immutable_assignment->type = "Int";
+    immutable_assignment->symbol_id = immutable_assignment_hir.statements[1]->symbol_id;
+    immutable_assignment->expression = std::make_unique<indicode::HirExpr>();
+    immutable_assignment->expression->kind = indicode::HirExprKind::Literal;
+    immutable_assignment->expression->type = "Int";
+    immutable_assignment->expression->value = "2";
+    immutable_assignment_hir.statements.push_back(std::move(immutable_assignment));
+    const auto immutable_assignment_diagnostics = indicode::verify_hir(immutable_assignment_hir);
+    require(std::any_of(immutable_assignment_diagnostics.begin(), immutable_assignment_diagnostics.end(),
+                        [](const auto& diagnostic) { return diagnostic.code == "E-HIR-035"; }),
+            "HIR verifier should reject assignment to an immutable binding");
+
+    auto out_of_scope_loop_name_hir = indicode::lower_to_hir(parsed.program);
+    auto out_of_scope_name = std::make_unique<indicode::HirStmt>();
+    out_of_scope_name->kind = indicode::HirStmtKind::Expression;
+    out_of_scope_name->expression = std::make_unique<indicode::HirExpr>();
+    out_of_scope_name->expression->kind = indicode::HirExprKind::Name;
+    out_of_scope_name->expression->type = "Int";
+    out_of_scope_name->expression->symbol = "item";
+    out_of_scope_loop_name_hir.statements.push_back(std::move(out_of_scope_name));
+    const auto out_of_scope_diagnostics = indicode::verify_hir(out_of_scope_loop_name_hir);
+    require(std::any_of(out_of_scope_diagnostics.begin(), out_of_scope_diagnostics.end(),
+                        [](const auto& diagnostic) { return diagnostic.code == "E-HIR-006"; }),
+            "for-each bindings should not escape their lexical scope in HIR");
 
     hir.statements[0]->expression->type = "";
     const auto invalid = indicode::verify_hir(hir);
@@ -137,6 +175,37 @@ int main() {
     const auto else_if_hir = indicode::lower_to_hir(else_if_parsed.program);
     require(indicode::verify_hir(else_if_hir).empty(),
             "else-if chain should lower to valid HIR with complete return coverage");
+
+    const indicode::SourceFile symbols_source{
+        "symbols.indi",
+        "outer = 1\n"
+        "function read() -> Int {\n"
+        "  if true { let outer: Int = 2; say(outer) }\n"
+        "  return outer\n"
+        "}\n"
+    };
+    const auto symbols_lexed = indicode::Lexer(symbols_source).lex();
+    auto symbols_parsed = indicode::Parser(symbols_lexed.tokens).parse();
+    require(symbols_lexed.diagnostics.empty() && symbols_parsed.diagnostics.empty() &&
+                indicode::Analyzer().analyze(symbols_parsed.program).diagnostics.empty(),
+            "global lookup and local shadowing should resolve during semantic analysis");
+    const auto& shadowed_name = *symbols_parsed.program.functions[0].body[0]->body[1]
+                                     ->expression->arguments[0];
+    const auto& global_name = *symbols_parsed.program.functions[0].body[1]->expression;
+    require(shadowed_name.resolved_symbol_id != 0 && global_name.resolved_symbol_id != 0 &&
+                shadowed_name.resolved_symbol_id != global_name.resolved_symbol_id,
+            "shadowed and global references should retain distinct stable symbol identities");
+    const auto symbols_hir = indicode::lower_to_hir(symbols_parsed.program);
+    require(indicode::verify_hir(symbols_hir).empty(),
+            "HIR verifier should resolve globals and shadowed locals by symbol identity");
+
+    auto wrong_shadow_identity_hir = indicode::lower_to_hir(symbols_parsed.program);
+    wrong_shadow_identity_hir.functions[0].body[0]->body[1]
+        ->expression->arguments[0]->symbol_id = global_name.resolved_symbol_id;
+    const auto wrong_identity_diagnostics = indicode::verify_hir(wrong_shadow_identity_hir);
+    require(std::any_of(wrong_identity_diagnostics.begin(), wrong_identity_diagnostics.end(),
+                        [](const auto& diagnostic) { return diagnostic.code == "E-HIR-033"; }),
+            "HIR verifier should reject a reference to the wrong shadowed symbol");
 
     std::cout << "HIR tests passed\n";
 }

@@ -5,6 +5,9 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+
 add_library(indicode_frontend
     src/lexer.cpp
     src/parser.cpp
@@ -13,11 +16,43 @@ add_library(indicode_frontend
     src/hir.cpp
     src/diagnostic.cpp
 )
-target_include_directories(indicode_frontend PUBLIC include)
+target_include_directories(indicode_frontend PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
+set_target_properties(indicode_frontend PROPERTIES EXPORT_NAME frontend)
 target_compile_options(indicode_frontend PRIVATE -Wall -Wextra -Wpedantic)
 
 add_executable(indicode src/driver/main.cpp)
 target_link_libraries(indicode PRIVATE indicode_frontend)
+
+configure_package_config_file(
+    cmake/indicodeConfig.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/indicodeConfig.cmake
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/indicode
+)
+write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/indicodeConfigVersion.cmake
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion
+)
+install(TARGETS indicode_frontend indicode
+    EXPORT indicodeTargets
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(EXPORT indicodeTargets
+    FILE indicodeTargets.cmake
+    NAMESPACE indicode::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/indicode
+)
+install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/indicodeConfig.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/indicodeConfigVersion.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/indicode
+)
 
 include(CTest)
 if(BUILD_TESTING)
@@ -62,5 +97,12 @@ if(BUILD_TESTING)
             -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/missing_parameter_colon.indi
             -DEXPECT_CODE=E-PARSE-001
             -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_json_diagnostics.cmake
+    )
+    add_test(NAME install_package_consumer
+        COMMAND ${CMAKE_COMMAND}
+            -DBUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}
+            -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+            -DTEST_ROOT=${CMAKE_CURRENT_BINARY_DIR}/package-consumer-test
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_install_package.cmake
     )
 endif()

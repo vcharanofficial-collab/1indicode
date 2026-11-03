@@ -12,23 +12,23 @@ This repository is a real, buildable, tested compiler-front-end prototype, but i
 
 ## Completion
 
-**Overall front-end completion: 93%**
+**Overall front-end completion: 95%**
 
-The percentage measures progress toward the complete front-end boundary described in the blueprint, not progress toward LLVM itself or the full AI compiler. It is a weighted estimate: each area's weight is fixed, and completion credit requires implemented, tested, documented acceptance behavior. Recent updates add fix-it diagnostics through text/JSON output and the CLI, rejection of overflowing/underflowing float literals, and lexer columns that account for UTF-8 scalar boundaries and four-column tab stops. The updated weighted total is **92.75%, rounded to 93%**.
+The percentage measures progress toward the compiler front-end boundary described in the blueprint, not progress toward LLVM itself or the full compiler. It is a weighted estimate: each area's weight is fixed, and completion credit requires implemented, tested, documented acceptance behavior. Recent work adds installable CMake package consumption plus stable local binding identities propagated from semantic analysis through typed HIR, with independent HIR scope/type/mutability checks. The updated weighted total is **95.00%, rounded to 95%**.
 
 | Acceptance area | Weight | Area completion | Evidence / remaining work |
 | --- | --- | --- |
-| Project/build foundation | 5% | 80% | C++20, CMake, and CTest work; install/package/CI acceptance remains. |
+| Project/build foundation | 5% | 95% | C++20, CMake, CTest, install/export package config, public headers and a separately configured/compiled package consumer; CI/release acceptance remains. |
 | Source manager and diagnostics | 10% | 90% | Source spans, caret rendering aligned across tabs and UTF-8 scalar columns, JSON escaping, and fix-it edits with source spans; owned source manager, terminal display-width handling, broad fix-it coverage, and a stable versioned JSON schema remain. |
 | Lexer | 15% | 92% | ASCII identifiers, UTF-8 strings, escapes, binary/octal/hex integers, digit separators, nested block comments with newline preservation, and scalar/tab-aware source columns; Unicode identifiers, suffix policy, trivia preservation, and complete numeric grammar remain. |
 | Parser and AST | 15% | 95% | Functions, blocks, calls, precedence, typed lists, indexing, for-each, named arguments, records/member access, tensor element/shape types, integer ranges, nested `else if`, and a missing-parameter-colon fix-it; full grammar recovery and AST snapshots remain. |
-| Name resolution | 10% | 75% | Lexical scopes, function/variable/parameter lookup, record type names/fields, and scoped for-each bindings; modules/imports and stable symbol identities remain. |
+| Name resolution | 10% | 90% | Lexical scopes, global/function/parameter/loop bindings, stable local symbol IDs, shadowing, and HIR revalidation of binding identity; modules/imports and stable function/type identities remain. |
 | Type checking and semantic validation | 15% | 98% | Scalar/radix integer inference, integer and floating literal range checks, checked numeric conversions, record construction/field types, tensor element/shape compatibility, integer range bounds, indexing, nested conditional return analysis, loops and mutability; tensor operations, ownership/effects and full conversion policies remain. |
-| Typed HIR and verification | 15% | 99% | Project-owned typed HIR covers records, member access, tensor types, checked numeric conversions, collections, and integer ranges; verifier checks return-path completeness plus range bound/result consistency and record/conversion/collection/index/loop/call contracts. Stable IDs, serialization/versioning and broader invariants remain. |
+| Typed HIR and verification | 15% | 99% | Project-owned typed HIR carries stable local binding IDs and covers records, member access, tensor types, checked numeric conversions, collections, and integer ranges; verifier rechecks lexical visibility, type identity, immutability, return paths, and expression/call/loop contracts. HIR serialization/versioning and broader language invariants remain. |
 | CLI and diagnostics tooling | 5% | 95% | `check`, `tokens`, `ast`, `typed`, source excerpts/carets aligned across tabs and UTF-8 scalar columns, JSON diagnostics with fix-its, and tensor/record example checks; terminal-specific display widths, editor interfaces, and diagnostics schema stability remain. |
-| Tests, docs, and integration | 10% | 99% | Twelve CTest cases cover parser recovery/fix-its, nested `else if` return paths, HIR return verification, float literal bounds, deterministic malformed-input smoke testing, tensor shapes, records, numeric conversions, integer ranges, diagnostics, and CLI; full conformance, coverage-guided fuzzing, sanitizers and CI remain. |
+| Tests, docs, and integration | 10% | 99% | Thirteen CTest cases cover parser recovery/fix-its, symbol identity/scope/mutability in HIR, nested `else if` return paths, float literal bounds, deterministic malformed-input smoke testing, tensor shapes, records, conversions, diagnostics, CLI, and an installed-package consumer; full conformance, coverage-guided fuzzing, sanitizers and CI remain. |
 
-Updated weighted estimate: 4.0 + 9.0 + 13.8 + 14.25 + 7.5 + 14.7 + 14.85 + 4.75 + 9.9 = **92.75%, rounded to 93%**. This is a rounded estimate for the front-end boundary, not a claim that every PDF feature is implemented.
+Updated weighted estimate: 4.75 + 9.0 + 13.8 + 14.25 + 9.0 + 14.7 + 14.85 + 4.75 + 9.9 = **95.00%, rounded to 95%**. This is a judgment-based estimate for the implemented front-end boundary, not a claim that 95% of a complete language specification or all possible compiler work is done.
 
 ## Work completed
 
@@ -70,6 +70,9 @@ Updated weighted estimate: 4.0 + 9.0 + 13.8 + 14.25 + 7.5 + 14.7 + 14.85 + 4.75 
 - Added optional diagnostic fix-its with replacement spans, messages, text hints, and JSON output; the parser suggests inserting `: ` after a function parameter name when its colon is missing.
 - Added semantic errors for decimal floating-point literals that overflow or underflow the supported host conversion range.
 - Lexer source columns now count valid UTF-8 continuation bytes as part of one scalar and expand tabs to four-column stops; byte offsets remain unchanged for slicing and edits.
+- Added stable IDs for local variables, parameters, and loop bindings through semantic analysis and AST-to-HIR lowering; HIR printing exposes those IDs for backend inspection.
+- HIR verification now independently checks lexical name visibility, matching symbol identity and type, immutable assignments, duplicate declarations, loop scope boundaries, and global bindings visible from functions.
+- Added CMake install/export rules, a versioned package config, and a CTest consumer that installs the library, configures a separate CMake project, links `indicode::frontend`, and runs it.
 
 ## Current limitations
 
@@ -77,7 +80,7 @@ Updated weighted estimate: 4.0 + 9.0 + 13.8 + 14.25 + 7.5 + 14.7 + 14.85 + 4.75 
 - Numeric suffixes, raw strings, and the complete string escape repertoire remain incomplete.
 - Semantic checking is a core subset; conversions require explicit checked mode and only basic static tensor shape equality is implemented. Numeric widening, tensor operations/broadcasting/device checks, exhaustive control-flow analysis, overloads, generics, module resolution, and complete diagnostics rendering remain.
 - Parser coverage is still a subset: complete newline rules, AST printer snapshot tests, and full grammar recovery remain. Range endpoint inclusivity and runtime iteration behavior are not defined because this front end does not execute programs.
-- Typed HIR/verifier currently cover the existing language subset only; they need complete semantic coverage, stable symbol identities, stronger validation, serialization/versioning, and conformance tests before an LLVM adapter is ready.
+- Typed HIR/verifier currently cover the existing language subset only; they need complete semantic coverage, stable function/type identities, serialization/versioning, and conformance tests before an LLVM adapter is ready.
 
 ## Milestones
 
@@ -93,7 +96,7 @@ LLVM/backend work begins only after these front-end milestones are complete and 
 ## Latest verification
 
 - A fresh out-of-tree CMake configure/build succeeded with GCC 13.3.
-- All 12 CTest cases passed, including parser recovery/robustness, semantic analysis, HIR verification, diagnostics, JSON fix-it CLI integration, and CLI checks for standard, record, and tensor-shape examples.
-- The suite also verifies nested `else if` return coverage, malformed HIR return-path rejection, invalid HIR parameter/call/return invariants, UTF-8/tab diagnostic caret alignment, and float literal overflow/underflow rejection.
+- All 13 CTest cases pass, including the separately built installed-package consumer.
+- The suite also verifies nested `else if` return coverage, malformed HIR return-path rejection, invalid HIR parameter/call/return/symbol-scope invariants, UTF-8/tab diagnostic caret alignment, and float literal overflow/underflow rejection.
 - Lexer regression tests confirm that UTF-8 byte offsets and human-facing source columns remain distinct and consistent after tabs and non-ASCII string contents.
 - The verification build was kept outside the project at `/tmp/indicode-progress-build`; no generated build files were added to the repository.

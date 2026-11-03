@@ -3,6 +3,7 @@
 #include "indicode/parser.hpp"
 #include "indicode/sema.hpp"
 
+#include <algorithm>
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -46,6 +47,13 @@ int main() {
                 printed.find("for %item: Int in") != std::string::npos,
             "typed HIR printer should show functions, collections, loops, and types");
 
+    auto missing_return_hir = indicode::lower_to_hir(parsed.program);
+    missing_return_hir.functions[0].body.clear();
+    const auto missing_return_diagnostics = indicode::verify_hir(missing_return_hir);
+    require(std::any_of(missing_return_diagnostics.begin(), missing_return_diagnostics.end(),
+                        [](const auto& diagnostic) { return diagnostic.code == "E-HIR-026"; }),
+            "HIR verifier should independently reject a non-Void function without complete return paths");
+
     hir.statements[0]->expression->type = "";
     const auto invalid = indicode::verify_hir(hir);
     require(!invalid.empty() && invalid[0].code == "E-HIR-004",
@@ -57,6 +65,8 @@ int main() {
         "origin = Point(x: 20, y: 22)\n"
         "answer = origin.x\n"
         "small = to_Int2(20, checked: true)\n"
+        "weight = to_Float(0.5, checked: true)\n"
+        "for index in 1..4 { say(index) }\n"
     };
     const auto records_lexed = indicode::Lexer(records_source).lex();
     auto records_parsed = indicode::Parser(records_lexed.tokens).parse();
@@ -70,8 +80,39 @@ int main() {
     const auto records_printed = indicode::print_hir(records_hir);
     require(records_printed.find("record @Point") != std::string::npos &&
                 records_printed.find(".x : Int") != std::string::npos &&
-                records_printed.find("call @to_Int2") != std::string::npos,
-            "typed HIR printer should show records, member access, and checked conversions");
+                records_printed.find("call @to_Int2") != std::string::npos &&
+                records_printed.find("call @to_Float") != std::string::npos &&
+                records_printed.find("range 1:Int .. 4:Int : Range<Int>") != std::string::npos,
+            "typed HIR printer should show records, member access, conversions, and ranges");
+
+    const indicode::SourceFile tensor_source{
+        "tensor.indi",
+        "function preserve(input: Tensor<Float, [Batch, 3]>) -> Tensor<Float, [Batch, 3]> "
+        "{ return input }\n"
+    };
+    const auto tensor_lexed = indicode::Lexer(tensor_source).lex();
+    auto tensor_parsed = indicode::Parser(tensor_lexed.tokens).parse();
+    require(tensor_lexed.diagnostics.empty() && tensor_parsed.diagnostics.empty() &&
+                indicode::Analyzer().analyze(tensor_parsed.program).diagnostics.empty(),
+            "tensor HIR fixture should parse and pass semantic checks");
+    const auto tensor_hir = indicode::lower_to_hir(tensor_parsed.program);
+    require(indicode::verify_hir(tensor_hir).empty(),
+            "typed HIR should preserve and verify tensor shape annotations");
+
+    const indicode::SourceFile else_if_source{
+        "else_if.indi",
+        "function classify(value: Int) -> Int {\n"
+        "  if value == 0 { return 0 } else if value == 1 { return 1 } else { return 2 }\n"
+        "}\n"
+    };
+    const auto else_if_lexed = indicode::Lexer(else_if_source).lex();
+    auto else_if_parsed = indicode::Parser(else_if_lexed.tokens).parse();
+    require(else_if_lexed.diagnostics.empty() && else_if_parsed.diagnostics.empty() &&
+                indicode::Analyzer().analyze(else_if_parsed.program).diagnostics.empty(),
+            "else-if chain should pass parsing and semantic analysis");
+    const auto else_if_hir = indicode::lower_to_hir(else_if_parsed.program);
+    require(indicode::verify_hir(else_if_hir).empty(),
+            "else-if chain should lower to valid HIR with complete return coverage");
 
     std::cout << "HIR tests passed\n";
 }

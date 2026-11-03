@@ -85,6 +85,7 @@ std::string token_kind_name(TokenKind kind) {
     case TokenKind::Comma: return "Comma";
     case TokenKind::Colon: return "Colon";
     case TokenKind::Dot: return "Dot";
+    case TokenKind::DotDot: return "DotDot";
     case TokenKind::Semicolon: return "Semicolon";
     case TokenKind::Arrow: return "Arrow";
     case TokenKind::Plus: return "Plus";
@@ -203,7 +204,7 @@ void Lexer::scan_token() {
     case ']': add_token(TokenKind::RightBracket, start); return;
     case ',': add_token(TokenKind::Comma, start); return;
     case ':': add_token(TokenKind::Colon, start); return;
-    case '.': add_token(TokenKind::Dot, start); return;
+    case '.': add_token(match('.') ? TokenKind::DotDot : TokenKind::Dot, start); return;
     case ';': add_token(TokenKind::Semicolon, start); return;
     case '+': add_token(TokenKind::Plus, start); return;
     case '*': add_token(TokenKind::Star, start); return;

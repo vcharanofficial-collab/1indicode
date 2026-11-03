@@ -46,6 +46,10 @@ int main() {
         "combined = \"e\\u{301}\"\n"
         "namedAnswer = add(b: fixed, a: 4)\n"
         "small = to_Int2(30000, checked: true)\n"
+        "halfValue = to_Half(1.5, checked: true)\n"
+        "floatValue = to_Float(0x10, checked: true)\n"
+        "doubleValue = to_Double(1e40, checked: true)\n"
+        "for index in 0..10 { say(index) }\n"
         "say(\"ok\")\n"
     };
     auto valid_program = parse_source(valid);
@@ -103,6 +107,23 @@ int main() {
             "unknown and duplicate named arguments should be rejected");
     require(valid_program.statements[17]->declared_type == "Int2",
             "checked integer conversions should infer their destination type");
+    require(valid_program.statements[18]->declared_type == "Half" &&
+                valid_program.statements[19]->declared_type == "Float" &&
+                valid_program.statements[20]->declared_type == "Double",
+            "checked floating-point conversions should infer their destination types");
+    require(valid_program.statements[21]->expression->inferred_type == "Range<Int>" &&
+                valid_program.statements[21]->declared_type == "Int",
+            "integer range loops should infer their element type");
+
+    const indicode::SourceFile else_if_source{
+        "else_if.indi",
+        "function classify(value: Int) -> Int {\n"
+        "  if value == 0 { return 0 } else if value == 1 { return 1 } else { return 2 }\n"
+        "}\n"
+    };
+    auto else_if_program = parse_source(else_if_source);
+    require(indicode::Analyzer().analyze(else_if_program).diagnostics.empty(),
+            "nested else-if branches that all return should satisfy return-path analysis");
 
     const indicode::SourceFile records_source{
         "records.indi",
@@ -131,6 +152,10 @@ int main() {
         "unchecked = to_Int2(1)\n"
         "overflow = to_Int2(40000, checked: true)\n"
         "wrong_source = to_Int2(\"bad\", checked: true)\n"
+        "half_overflow = to_Half(65520, checked: true)\n"
+        "float_overflow = to_Float(1e40, checked: true)\n"
+        "fractional_integer = to_Int2(2.5, checked: true)\n"
+        "mixed_range = 1..2.0\n"
     };
     auto invalid_records_program = parse_source(invalid_records_source);
     const auto invalid_records_result = indicode::Analyzer().analyze(invalid_records_program);
@@ -139,16 +164,36 @@ int main() {
     bool saw_non_record_access = false;
     bool saw_invalid_conversion = false;
     bool saw_conversion_range_error = false;
+    bool saw_invalid_range = false;
+    std::size_t conversion_range_errors = 0;
     for (const auto& diagnostic : invalid_records_result.diagnostics) {
         saw_field_type_error = saw_field_type_error || diagnostic.code == "E-SEMA-041";
         saw_missing_field = saw_missing_field || diagnostic.code == "E-SEMA-043";
         saw_non_record_access = saw_non_record_access || diagnostic.code == "E-SEMA-042";
         saw_invalid_conversion = saw_invalid_conversion || diagnostic.code == "E-SEMA-044";
         saw_conversion_range_error = saw_conversion_range_error || diagnostic.code == "E-SEMA-022";
+        saw_invalid_range = saw_invalid_range || diagnostic.code == "E-SEMA-045";
+        if (diagnostic.code == "E-SEMA-022") ++conversion_range_errors;
     }
     require(saw_field_type_error && saw_missing_field && saw_non_record_access &&
                 saw_invalid_conversion && saw_conversion_range_error,
             "invalid records, member accesses, and integer conversions should be diagnosed");
+    require(conversion_range_errors >= 4,
+            "integer and floating conversion constants outside the target range should be diagnosed");
+    require(saw_invalid_range, "range bounds with mismatched numeric types should be rejected");
+
+    const indicode::SourceFile tensor_source{
+        "tensor.indi",
+        "function preserve(input: Tensor<Float, [Batch, 3]>) -> Tensor<Float, [Batch, 3]> "
+        "{ return input }\n"
+        "function mismatch(input: Tensor<Float, [Batch, 3]>) -> Tensor<Float, [Batch, 4]> "
+        "{ return input }\n"
+    };
+    auto tensor_program = parse_source(tensor_source);
+    const auto tensor_result = indicode::Analyzer().analyze(tensor_program);
+    require(tensor_result.diagnostics.size() == 1 &&
+                tensor_result.diagnostics[0].code == "E-SEMA-008",
+            "tensor return checking should reject statically incompatible dimensions");
 
     std::cout << "Semantic tests passed\n";
 }

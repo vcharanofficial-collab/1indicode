@@ -128,16 +128,41 @@ void Parser::synchronize() {
     }
 }
 
+void Parser::synchronize_declaration() {
+    std::size_t brace_depth = 0;
+    bool saw_body = false;
+    while (!at_end()) {
+        if (brace_depth == 0 && (check_keyword("function") || check_keyword("record"))) {
+            return;
+        }
+        if (check(TokenKind::Newline) || check(TokenKind::Semicolon)) {
+            if (!saw_body) return;
+            advance();
+            continue;
+        }
+        if (match(TokenKind::LeftBrace)) {
+            saw_body = true;
+            ++brace_depth;
+            continue;
+        }
+        if (match(TokenKind::RightBrace)) {
+            if (brace_depth == 0 || --brace_depth == 0) return;
+            continue;
+        }
+        advance();
+    }
+}
+
 void Parser::declaration() {
     if (match_keyword("record")) {
         if (!record_declaration()) {
-            synchronize();
+            synchronize_declaration();
         }
         return;
     }
     if (match_keyword("function")) {
         if (!function_declaration()) {
-            synchronize();
+            synchronize_declaration();
         }
         return;
     }
@@ -156,6 +181,37 @@ std::string Parser::parse_type() {
         return {};
     }
     std::string type = name->lexeme;
+    if (type == "Tensor") {
+        if (consume(TokenKind::Less, "expected '<' after Tensor") == nullptr) {
+            return {};
+        }
+        const auto element_type = parse_type();
+        if (element_type.empty() || consume(TokenKind::Comma, "expected ',' after tensor element type") == nullptr ||
+            consume(TokenKind::LeftBracket, "expected '[' before tensor dimensions") == nullptr) {
+            return {};
+        }
+        std::string dimensions;
+        if (check(TokenKind::Identifier) || check(TokenKind::IntegerLiteral)) {
+            do {
+                if (!check(TokenKind::Identifier) && !check(TokenKind::IntegerLiteral)) {
+                    error(peek(), "expected a tensor dimension name or integer");
+                    return {};
+                }
+                if (!dimensions.empty()) dimensions += ',';
+                dimensions += advance().lexeme;
+            } while (match(TokenKind::Comma));
+        }
+        if (dimensions.empty()) {
+            error(peek(), "tensor shape must contain at least one dimension");
+            return {};
+        }
+        if (consume(TokenKind::RightBracket, "expected ']' after tensor dimensions") == nullptr ||
+            consume(TokenKind::Greater, "expected '>' after tensor type") == nullptr) {
+            return {};
+        }
+        type = "Tensor<" + element_type + ",[" + dimensions + "]>";
+        return type;
+    }
     if (match(TokenKind::Less)) {
         const auto argument_type = parse_type();
         if (argument_type.empty() || consume(TokenKind::Greater, "expected '>' after type argument") == nullptr) {
@@ -370,8 +426,17 @@ std::unique_ptr<Stmt> Parser::if_statement(const Token& keyword) {
         return nullptr;
     }
     if (match_keyword("else")) {
-        if (consume(TokenKind::LeftBrace, "expected '{' after else") == nullptr || !block(result->else_body)) {
-            return nullptr;
+        if (match_keyword("if")) {
+            auto nested_if = if_statement(previous());
+            if (!nested_if) {
+                return nullptr;
+            }
+            result->else_body.push_back(std::move(nested_if));
+        } else {
+            if (consume(TokenKind::LeftBrace, "expected '{' after else") == nullptr ||
+                !block(result->else_body)) {
+                return nullptr;
+            }
         }
     }
     result->span.end = previous().span.end;
@@ -466,7 +531,7 @@ std::unique_ptr<Expr> Parser::parse_precedence(int minimum_precedence) {
             return nullptr;
         }
         auto combined = std::make_unique<Expr>();
-        combined->kind = ExprKind::Binary;
+        combined->kind = operation.kind == TokenKind::DotDot ? ExprKind::Range : ExprKind::Binary;
         combined->value = operation.lexeme;
         combined->span = {left->span.start, right->span.end};
         combined->left = std::move(left);
@@ -626,17 +691,18 @@ int Parser::precedence(TokenKind kind) {
     switch (kind) {
     case TokenKind::OrOr: return 1;
     case TokenKind::AndAnd: return 2;
+    case TokenKind::DotDot: return 3;
     case TokenKind::EqualEqual:
-    case TokenKind::BangEqual: return 3;
+    case TokenKind::BangEqual: return 4;
     case TokenKind::Less:
     case TokenKind::LessEqual:
     case TokenKind::Greater:
-    case TokenKind::GreaterEqual: return 4;
+    case TokenKind::GreaterEqual: return 5;
     case TokenKind::Plus:
-    case TokenKind::Minus: return 5;
+    case TokenKind::Minus: return 6;
     case TokenKind::Star:
     case TokenKind::Slash:
-    case TokenKind::Percent: return 6;
+    case TokenKind::Percent: return 7;
     default: return 0;
     }
 }

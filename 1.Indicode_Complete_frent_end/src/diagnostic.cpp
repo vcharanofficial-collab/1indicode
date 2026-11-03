@@ -37,31 +37,81 @@ std::string json_escape(std::string_view value) {
     return result;
 }
 
-std::string_view source_line(const SourceFile& source, std::size_t requested_line) {
+struct SourceLine {
+    std::string_view text;
+    std::size_t offset = 0;
+    bool found = false;
+};
+
+SourceLine source_line(const SourceFile& source, std::size_t requested_line) {
     std::size_t line = 1;
     std::size_t start = 0;
-    for (std::size_t index = 0; index < source.contents.size(); ++index) {
-        if (line == requested_line) {
-            start = index;
-            break;
-        }
-        if (source.contents[index] == '\n') {
-            ++line;
-            start = index + 1;
-        }
-    }
-    if (line != requested_line) {
-        if (requested_line == line) {
-            start = source.contents.size();
-        } else {
+    while (line < requested_line) {
+        const auto newline = source.contents.find('\n', start);
+        if (newline == std::string::npos) {
             return {};
         }
+        start = newline + 1;
+        ++line;
     }
     auto end = source.contents.find_first_of("\r\n", start);
     if (end == std::string::npos) {
         end = source.contents.size();
     }
-    return std::string_view(source.contents).substr(start, end - start);
+    return {std::string_view(source.contents).substr(start, end - start), start, true};
+}
+
+std::size_t utf8_scalar_length(std::string_view text, std::size_t offset) {
+    if (offset >= text.size()) {
+        return 1;
+    }
+    const auto first = static_cast<unsigned char>(text[offset]);
+    std::size_t length = first < 0x80 ? 1 :
+                         first >= 0xc2 && first <= 0xdf ? 2 :
+                         first >= 0xe0 && first <= 0xef ? 3 :
+                         first >= 0xf0 && first <= 0xf4 ? 4 : 1;
+    if (offset + length > text.size()) {
+        return 1;
+    }
+    for (std::size_t index = 1; index < length; ++index) {
+        if ((static_cast<unsigned char>(text[offset + index]) & 0xc0) != 0x80) {
+            return 1;
+        }
+    }
+    return length;
+}
+
+std::size_t display_column(std::string_view text, std::size_t byte_offset) {
+    std::size_t column = 0;
+    for (std::size_t index = 0; index < std::min(byte_offset, text.size());) {
+        if (text[index] == '\t') {
+            column += 4 - column % 4;
+            ++index;
+        } else {
+            index += utf8_scalar_length(text, index);
+            ++column;
+        }
+    }
+    return column;
+}
+
+std::string expand_tabs(std::string_view text) {
+    std::string result;
+    std::size_t column = 0;
+    for (std::size_t index = 0; index < text.size();) {
+        if (text[index] == '\t') {
+            const auto spaces = 4 - column % 4;
+            result.append(spaces, ' ');
+            column += spaces;
+            ++index;
+        } else {
+            const auto length = utf8_scalar_length(text, index);
+            result.append(text.substr(index, length));
+            index += length;
+            ++column;
+        }
+    }
+    return result;
 }
 
 }
@@ -72,20 +122,24 @@ std::string format_diagnostic_text(const SourceFile& source, const Diagnostic& d
            << diagnostic.span.start.column << ": " << severity_name(diagnostic.severity)
            << '[' << diagnostic.code << "]: " << diagnostic.message;
 
-    const auto text = source_line(source, diagnostic.span.start.line);
-    if (text.empty()) {
+    const auto line = source_line(source, diagnostic.span.start.line);
+    if (!line.found) {
         return output.str();
     }
-    output << "\n  " << text << "\n  ";
-    const auto column = diagnostic.span.start.column > 0 ? diagnostic.span.start.column - 1 : 0;
-    output << std::string(std::min(column, text.size()), ' ');
+    output << "\n  " << expand_tabs(line.text) << "\n  ";
+    const auto start_offset = diagnostic.span.start.offset >= line.offset
+        ? std::min(diagnostic.span.start.offset - line.offset, line.text.size())
+        : std::size_t{0};
+    const auto column = display_column(line.text, start_offset);
+    output << std::string(column, ' ');
     const auto same_line_end = diagnostic.span.end.line == diagnostic.span.start.line
-        ? diagnostic.span.end.column
-        : diagnostic.span.start.column + 1;
-    const auto width = same_line_end > diagnostic.span.start.column
-        ? same_line_end - diagnostic.span.start.column
-        : 1;
-    output << std::string(std::min(width, text.size() > column ? text.size() - column : std::size_t{1}), '^');
+        ? std::min(diagnostic.span.end.offset >= line.offset
+                       ? diagnostic.span.end.offset - line.offset
+                       : start_offset,
+                   line.text.size())
+        : start_offset + utf8_scalar_length(line.text, start_offset);
+    const auto end_column = display_column(line.text, same_line_end);
+    output << std::string(std::max(std::size_t{1}, end_column > column ? end_column - column : 0), '^');
     return output.str();
 }
 

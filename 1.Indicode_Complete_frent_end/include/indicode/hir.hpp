@@ -14,6 +14,7 @@ enum class HirExprKind {
     Literal,
     Unary,
     Binary,
+    Range,
     Call,
     ListLiteral,
     Index,

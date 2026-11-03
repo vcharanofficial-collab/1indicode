@@ -41,5 +41,16 @@ int main() {
     require(json.find("\"start\":{\"offset\":8,\"line\":1,\"column\":9}") != std::string::npos,
             "JSON should preserve structured start position");
 
+    const indicode::SourceFile unicode_source{"unicode.indi", "\tπ = value\n"};
+    const indicode::Diagnostic unicode_diagnostic{
+        indicode::DiagnosticSeverity::Error,
+        "E-TEST-001",
+        "unknown name",
+        {{6, 1, 7}, {11, 1, 12}}
+    };
+    const auto unicode_text = indicode::format_diagnostic_text(unicode_source, unicode_diagnostic);
+    require(unicode_text.find("    π = value\n          ^^^^^") != std::string::npos,
+            "diagnostic caret should align after tabs and multi-byte UTF-8 scalars");
+
     std::cout << "Diagnostic tests passed\n";
 }

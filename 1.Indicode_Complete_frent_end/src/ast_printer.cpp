@@ -32,6 +32,13 @@ void print_expression(std::ostringstream& output, const Expr& expression, bool i
         print_expression(output, *expression.right, include_types);
         output << ')';
         break;
+    case ExprKind::Range:
+        output << "Range(";
+        print_expression(output, *expression.left, include_types);
+        output << " .. ";
+        print_expression(output, *expression.right, include_types);
+        output << ')';
+        break;
     case ExprKind::Call:
         output << "Call(" << expression.value;
         for (std::size_t index = 0; index < expression.arguments.size(); ++index) {

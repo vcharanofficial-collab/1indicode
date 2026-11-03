@@ -22,6 +22,7 @@ enum class TokenKind {
     Comma,
     Colon,
     Dot,
+    DotDot,
     Semicolon,
     Arrow,
     Plus,

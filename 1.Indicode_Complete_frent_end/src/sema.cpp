@@ -1,7 +1,9 @@
 #include "indicode/sema.hpp"
 
 #include <charconv>
+#include <cmath>
 #include <cstdint>
+#include <functional>
 #include <limits>
 #include <utility>
 
@@ -21,6 +23,14 @@ bool is_numeric_type(const std::string& type) {
 
 std::string get_list_element_type(const std::string& type) {
     constexpr std::string_view prefix = "List<";
+    if (type.starts_with(prefix) && type.size() > prefix.size() && type.back() == '>') {
+        return type.substr(prefix.size(), type.size() - prefix.size() - 1);
+    }
+    return {};
+}
+
+std::string range_element_type(const std::string& type) {
+    constexpr std::string_view prefix = "Range<";
     if (type.starts_with(prefix) && type.size() > prefix.size() && type.back() == '>') {
         return type.substr(prefix.size(), type.size() - prefix.size() - 1);
     }
@@ -63,14 +73,122 @@ bool is_integer_literal_expression(const Expr& expression) {
            expression.left->value.front() >= '0' && expression.left->value.front() <= '9';
 }
 
-std::string integer_conversion_target(const std::string& name) {
+std::string numeric_conversion_target(const std::string& name) {
     static const std::unordered_map<std::string, std::string> conversions{
         {"to_Byte", "Byte"}, {"to_U8", "U8"}, {"to_Int2", "Int2"},
         {"to_UInt2", "UInt2"}, {"to_Int", "Int"}, {"to_UInt", "UInt"},
-        {"to_Long", "Long"}, {"to_ULong", "ULong"}
+        {"to_Long", "Long"}, {"to_ULong", "ULong"}, {"to_Half", "Half"},
+        {"to_Float", "Float"}, {"to_Double", "Double"}
     };
     const auto conversion = conversions.find(name);
     return conversion == conversions.end() ? std::string{} : conversion->second;
+}
+
+bool numeric_literal_value(const Expr& expression, long double& value) {
+    const bool negative = expression.kind == ExprKind::Unary && expression.value == "-";
+    const Expr& literal = negative ? *expression.left : expression;
+    std::string spelling;
+    spelling.reserve(literal.value.size());
+    for (const char character : literal.value) {
+        if (character != '_') spelling.push_back(character);
+    }
+
+    if (literal.inferred_type == "Float") {
+        double parsed = 0;
+        const auto result = std::from_chars(spelling.data(), spelling.data() + spelling.size(), parsed);
+        if (result.ec != std::errc{} || result.ptr != spelling.data() + spelling.size() ||
+            !std::isfinite(parsed)) {
+            return false;
+        }
+        value = parsed;
+    } else {
+        std::uint64_t magnitude = 0;
+        if (!parse_integer_magnitude(spelling, magnitude)) {
+            return false;
+        }
+        value = static_cast<long double>(magnitude);
+    }
+    if (negative) value = -value;
+    return true;
+}
+
+bool numeric_literal_fits(const Expr& expression, const std::string& type) {
+    long double value = 0;
+    if (!numeric_literal_value(expression, value)) {
+        return false;
+    }
+
+    if (type == "Half") {
+        return std::fabs(value) <= 65504.0L;
+    }
+    if (type == "Float") {
+        return std::fabs(value) <= static_cast<long double>(std::numeric_limits<float>::max());
+    }
+    if (type == "Double") {
+        return std::fabs(value) <= static_cast<long double>(std::numeric_limits<double>::max());
+    }
+    if (std::trunc(value) != value) {
+        return false;
+    }
+    long double minimum = 0;
+    long double maximum = 0;
+    if (type == "Byte" || type == "U8") maximum = 255.0L;
+    else if (type == "Int2") { minimum = -32768.0L; maximum = 32767.0L; }
+    else if (type == "UInt2") maximum = 65535.0L;
+    else if (type == "Int") {
+        minimum = static_cast<long double>(std::numeric_limits<std::int32_t>::min());
+        maximum = static_cast<long double>(std::numeric_limits<std::int32_t>::max());
+    } else if (type == "UInt") maximum = 4294967295.0L;
+    else if (type == "Long") {
+        minimum = static_cast<long double>(std::numeric_limits<std::int64_t>::min());
+        maximum = static_cast<long double>(std::numeric_limits<std::int64_t>::max());
+    } else if (type == "ULong") {
+        maximum = static_cast<long double>(std::numeric_limits<std::uint64_t>::max());
+    } else {
+        return false;
+    }
+    return value >= minimum && value <= maximum;
+}
+
+bool is_tensor_type(const std::string& type,
+                    const std::function<bool(const std::string&)>& is_known_type) {
+    constexpr std::string_view prefix = "Tensor<";
+    if (!type.starts_with(prefix) || type.size() <= prefix.size() + 3 ||
+        !type.ends_with("]>")) {
+        return false;
+    }
+    const auto dimensions_start = type.find(",[", prefix.size());
+    if (dimensions_start == std::string::npos) {
+        return false;
+    }
+    const auto element_type = type.substr(prefix.size(), dimensions_start - prefix.size());
+    if (!is_known_type(element_type) || !is_numeric_type(element_type)) {
+        return false;
+    }
+
+    const auto dimensions_end = type.size() - 2;
+    std::size_t start = dimensions_start + 2;
+    while (start < dimensions_end) {
+        const auto end = type.find(',', start);
+        const auto stop = end == std::string::npos || end > dimensions_end ? dimensions_end : end;
+        if (stop == start) return false;
+        const auto dimension = type.substr(start, stop - start);
+        const bool numeric = dimension.front() >= '0' && dimension.front() <= '9';
+        if (numeric) {
+            std::uint64_t value = 0;
+            if (!parse_integer_magnitude(dimension, value)) return false;
+        } else {
+            if (!(dimension.front() == '_' || (dimension.front() >= 'A' && dimension.front() <= 'Z') ||
+                  (dimension.front() >= 'a' && dimension.front() <= 'z'))) return false;
+            for (const char character : dimension) {
+                if (!(character == '_' || (character >= 'A' && character <= 'Z') ||
+                      (character >= 'a' && character <= 'z') ||
+                      (character >= '0' && character <= '9'))) return false;
+            }
+        }
+        start = stop + 1;
+    }
+    return start == dimensions_end + 1;
 }
 
 bool integer_literal_fits(const Expr& expression, const std::string& type) {
@@ -158,7 +276,7 @@ SemanticResult Analyzer::analyze(Program& program) {
     }
 
     for (const auto& function : program.functions) {
-        if (function.name == "say" || !integer_conversion_target(function.name).empty() ||
+        if (function.name == "say" || !numeric_conversion_target(function.name).empty() ||
             functions_.contains(function.name)) {
             add_error("E-SEMA-001", "function name is already declared", function.span);
             continue;
@@ -204,8 +322,16 @@ void Analyzer::add_error(const char* code, const char* message, SourceSpan span)
 }
 
 bool Analyzer::is_known_type(const std::string& type) const {
+    if (type.starts_with("Tensor<")) {
+        return is_tensor_type(type, [this](const std::string& element) {
+            return is_known_type(element);
+        });
+    }
     if (const auto element_type = list_element_type(type); !element_type.empty()) {
         return is_known_type(element_type) && element_type != "Void";
+    }
+    if (const auto element_type = range_element_type(type); !element_type.empty()) {
+        return is_integer_type(element_type);
     }
     return records_.contains(type) || type == "Bool" || type == "Byte" || type == "U8" || type == "Int2" ||
            type == "UInt2" || type == "Int" || type == "UInt" || type == "Long" ||
@@ -350,7 +476,10 @@ void Analyzer::analyze_statement(Stmt& statement) {
     }
     case StmtKind::ForEach: {
         const auto iterable_type = analyze_expression(*statement.expression);
-        const auto element_type = iterable_type == "Text" ? "Char" : list_element_type(iterable_type);
+        auto element_type = iterable_type == "Text" ? "Char" : list_element_type(iterable_type);
+        if (element_type.empty()) {
+            element_type = range_element_type(iterable_type);
+        }
         if (element_type.empty()) {
             if (iterable_type != error_type) {
                 add_error("E-SEMA-023", "for-each requires a List<T> or Text value", statement.expression->span);
@@ -436,6 +565,16 @@ std::string Analyzer::analyze_expression(Expr& expression) {
         }
         break;
     }
+    case ExprKind::Range: {
+        const auto start_type = analyze_expression(*expression.left);
+        const auto end_type = analyze_expression(*expression.right);
+        if (is_integer_type(start_type) && start_type == end_type) {
+            type = "Range<" + start_type + ">";
+        } else if (start_type != error_type && end_type != error_type) {
+            add_error("E-SEMA-045", "range bounds must have the same integer type", expression.span);
+        }
+        break;
+    }
     case ExprKind::Call: {
         std::vector<std::string> argument_types;
         for (auto& argument : expression.arguments) {
@@ -451,7 +590,7 @@ std::string Analyzer::analyze_expression(Expr& expression) {
         } else {
             const auto function = functions_.find(expression.value);
             if (function == functions_.end()) {
-                const auto conversion_type = integer_conversion_target(expression.value);
+                const auto conversion_type = numeric_conversion_target(expression.value);
                 if (!conversion_type.empty()) {
                     const bool valid_shape = argument_types.size() == 2 &&
                         expression.argument_names.size() == 2 &&
@@ -466,7 +605,7 @@ std::string Analyzer::analyze_expression(Expr& expression) {
                                   "integer conversion expects a numeric value and checked: true",
                                   expression.span);
                     } else if (is_integer_literal_expression(*expression.arguments[0]) &&
-                               !integer_literal_fits(*expression.arguments[0], conversion_type)) {
+                               !numeric_literal_fits(*expression.arguments[0], conversion_type)) {
                         add_error("E-SEMA-022",
                                   "integer literal is outside the conversion target range",
                                   expression.arguments[0]->span);

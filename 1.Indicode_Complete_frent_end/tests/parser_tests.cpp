@@ -30,6 +30,7 @@ int main() {
         "named = add(b: 2, a: 1)\n"
         "List<Int> empty = []\n"
         "function keep(values: List<Int>) -> List<Int> { return values }\n"
+        "for index in 0..10 { say(index) }\n"
     };
     const auto lexed = indicode::Lexer(source).lex();
     const auto parsed = indicode::Parser(lexed.tokens).parse();
@@ -50,8 +51,8 @@ int main() {
     require(assignment->expression->right->kind == indicode::ExprKind::Binary &&
                 assignment->expression->right->value == "*",
             "multiplication should bind more tightly than addition");
-        require(parsed.program.statements.size() == 7,
-            "calls, named arguments, repeat/for-each loops, lists, and indexing should parse");
+        require(parsed.program.statements.size() == 8,
+            "calls, named arguments, repeat/for-each loops, lists, indexing, and ranges should parse");
     require(parsed.program.statements[2]->expression->kind == indicode::ExprKind::ListLiteral,
             "bracketed values should parse as list literals");
     require(parsed.program.statements[3]->expression->kind == indicode::ExprKind::Index,
@@ -59,6 +60,9 @@ int main() {
     require(parsed.program.statements[4]->kind == indicode::StmtKind::ForEach &&
                 parsed.program.statements[4]->name == "item",
             "for-each should retain its iteration binding");
+    require(parsed.program.statements[7]->kind == indicode::StmtKind::ForEach &&
+                parsed.program.statements[7]->expression->kind == indicode::ExprKind::Range,
+            "integer ranges should parse as for-each iterables");
         require(parsed.program.statements[5]->expression->argument_names[0] == "b" &&
                                 parsed.program.statements[5]->expression->argument_names[1] == "a",
                         "parser should retain named argument labels and order");
@@ -79,6 +83,18 @@ int main() {
     require(malformed_result.diagnostics[0].code == "E-PARSE-001",
             "parser diagnostic code should be stable");
 
+    const indicode::SourceFile recoverable{
+        "recoverable.indi",
+        "function broken(value Int) { return value }\n"
+        "survivor = 42\n"
+    };
+    const auto recoverable_lexed = indicode::Lexer(recoverable).lex();
+    const auto recoverable_result = indicode::Parser(recoverable_lexed.tokens).parse();
+    require(!recoverable_result.diagnostics.empty() &&
+                recoverable_result.program.statements.size() == 1 &&
+                recoverable_result.program.statements[0]->name == "survivor",
+            "parser recovery should retain valid declarations after a malformed function");
+
     const std::vector<indicode::Token> empty_tokens;
     const auto empty_result = indicode::Parser(empty_tokens).parse();
     require(empty_result.diagnostics.empty() && empty_result.program.statements.empty(),
@@ -98,6 +114,40 @@ int main() {
                 records_parsed.program.records[0].fields.size() == 2 &&
                 records_parsed.program.statements[1]->expression->kind == indicode::ExprKind::Member,
             "record fields and member access should be represented in the AST");
+
+    const indicode::SourceFile tensor_source{
+        "tensor.indi",
+        "function identity(input: Tensor<Float, [Batch, 3]>) -> Tensor<Float, [Batch, 3]> "
+        "{ return input }\n"
+    };
+    const auto tensor_lexed = indicode::Lexer(tensor_source).lex();
+    const auto tensor_parsed = indicode::Parser(tensor_lexed.tokens).parse();
+    require(tensor_lexed.diagnostics.empty() && tensor_parsed.diagnostics.empty(),
+            "tensor element types and symbolic/static dimensions should parse");
+    require(tensor_parsed.program.functions[0].parameters[0].type == "Tensor<Float,[Batch,3]>" &&
+                tensor_parsed.program.functions[0].return_type == "Tensor<Float,[Batch,3]>",
+            "tensor dimensions should be preserved canonically in AST types");
+
+    const indicode::SourceFile range_source{"range.indi", "value = 1..5 + 2\n"};
+    const auto range_lexed = indicode::Lexer(range_source).lex();
+    const auto range_parsed = indicode::Parser(range_lexed.tokens).parse();
+    require(range_lexed.diagnostics.empty() && range_parsed.diagnostics.empty() &&
+                range_parsed.program.statements[0]->expression->kind == indicode::ExprKind::Range &&
+                range_parsed.program.statements[0]->expression->right->kind == indicode::ExprKind::Binary,
+            "range parsing should preserve endpoint arithmetic precedence");
+
+    const indicode::SourceFile else_if_source{
+        "else_if.indi",
+        "function classify(value: Int) -> Int {\n"
+        "  if value == 0 { return 0 } else if value == 1 { return 1 } else { return 2 }\n"
+        "}\n"
+    };
+    const auto else_if_lexed = indicode::Lexer(else_if_source).lex();
+    const auto else_if_parsed = indicode::Parser(else_if_lexed.tokens).parse();
+    require(else_if_lexed.diagnostics.empty() && else_if_parsed.diagnostics.empty() &&
+                else_if_parsed.program.functions[0].body[0]->else_body.size() == 1 &&
+                else_if_parsed.program.functions[0].body[0]->else_body[0]->kind == indicode::StmtKind::If,
+            "else-if chains should parse as nested conditional statements");
 
     std::cout << "Parser tests passed\n";
 }

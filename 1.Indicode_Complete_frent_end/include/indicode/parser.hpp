@@ -39,6 +39,7 @@ private:
     void error(const Token& token, const char* message);
     void skip_separators();
     void synchronize();
+    void synchronize_declaration();
     void declaration();
     std::string parse_type();
     bool record_declaration();

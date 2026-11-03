@@ -10,15 +10,16 @@ LLVM is a large, separate compiler framework. This project does **not** download
 
 The PDF is a blueprint, not a list of features already completed. Its 777 concepts are a long-term catalogue, not 777 built-in types or a promise to implement every idea immediately.
 
-## Current Overall Progress: 80%
+## Current Overall Progress: 91%
 
-This percentage means estimated completion of the **front-end work needed before a future LLVM adapter**. It does not mean 80% of LLVM, machine-code generation, a GPU compiler, or the AI runtime is complete.
+This percentage means estimated completion of the **front-end work needed before a future LLVM adapter**. It does not mean 86% of LLVM, machine-code generation, a GPU compiler, or the AI runtime is complete.
 
 The estimate uses the weighted acceptance areas in `PROGRESS.md`:
 
-- Previous estimate: 69.0%.
-- Records, named record construction, member type checking, checked integer conversions, and HIR verification were added with tests and an end-to-end CLI example.
-- Updated weighted estimate: 80.05%, rounded to **80%** (see `PROGRESS.md`).
+- Records, named construction, member checking, checked numeric conversions, static/symbolic tensor shapes, improved declaration recovery, and parser robustness coverage have been added.
+- Integer ranges and typed `for` bindings are supported, along with nested `else if` return-path analysis and HIR verification.
+- Text diagnostic carets align with expanded tabs and UTF-8 scalar columns; full terminal display-width handling remains future work.
+- Updated weighted estimate: 90.65%, rounded to **91%** (see `PROGRESS.md`).
 
 This is an estimate, not a marketing score. It may go down if a review finds missing acceptance behavior. Passing tests prove only the tested cases, not completeness of the language.
 
@@ -37,8 +38,11 @@ This is an estimate, not a marketing score. It may go down if a review finds mis
 - Function calls accept named arguments such as `add(b: 22, a: 20)` and reject unknown, duplicate, missing, or out-of-order arguments.
 - Nested block comments use `/* ... */`; newlines inside them still separate statements. An unclosed comment is a compile-time error.
 - Records support typed fields, construction with named fields, and read-only member access with type checking.
-- Integer values can be explicitly converted with functions such as `to_Int2(value, checked: true)`. Integer constants outside the destination range are rejected; dynamic inputs require the checked mode.
-- Nine CTest cases cover the current front-end behavior, including the record sample.
+- Numeric values can be explicitly converted with functions such as `to_Int2(value, checked: true)` and `to_Float(value, checked: true)`. Literal range/finite checks run before lowering.
+- Tensor function signatures support numeric element types and static or symbolic dimensions, such as `Tensor<Float, [Batch, 784]>`; incompatible shapes are rejected by exact type checking.
+- Integer ranges such as `0..10` are parsed and type-checked; `for item in 0..10` binds `item` to the bound integer type.
+- `else if` chains are parsed into nested conditionals, and each branch participates in non-`Void` return-path checks.
+- Eleven CTest cases include parser recovery, a deterministic malformed-input smoke test, tensor shapes, and record/conversion samples.
 
 ## Newly Supported Syntax
 
@@ -62,7 +66,27 @@ Integer conversion is explicit and checked:
 small = to_Int2(30000, checked: true)
 ```
 
-The current conversion subset targets integer types only. Floating-point conversion rules and runtime execution of conversions are not implemented.
+The current conversion subset supports checked conversions to integer and floating-point types. It does not execute conversions at runtime.
+
+Tensor declarations support static and symbolic dimensions in types and signatures:
+
+```indi
+function preserve_batch(batch: Tensor<Float, [Batch, 784]>) -> Tensor<Float, [Batch, 784]> {
+    return batch
+}
+```
+
+Incompatible declared shapes are rejected. Tensor construction, operators, broadcasting, device placement, and runtime shape guards are not implemented.
+
+Integer ranges use two endpoints:
+
+```indi
+for step in 0..10 {
+    say(step)
+}
+```
+
+Both endpoints must have the same integer type. The parser and type checker do not define runtime iteration or whether the upper endpoint is included; programs are not executed by this front end.
 
 Lists are written with square brackets. A non-empty list must contain values of one type. Its type is inferred from those values.
 
@@ -141,6 +165,7 @@ ctest --test-dir /tmp/indicode-build --output-on-failure
 /tmp/indicode-build/indicode check examples/hello.indi
 /tmp/indicode-build/indicode typed examples/hello.indi
 /tmp/indicode-build/indicode check examples/records.indi
+/tmp/indicode-build/indicode check examples/tensor_shapes.indi
 ```
 
 A successful check means the source passed the current subset's front-end checks. It does not mean the program was executed or compiled to machine code.

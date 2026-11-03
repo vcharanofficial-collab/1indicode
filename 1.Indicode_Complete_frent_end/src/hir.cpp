@@ -1,5 +1,7 @@
 #include "indicode/hir.hpp"
 
+#include <charconv>
+#include <cstdint>
 #include <functional>
 #include <sstream>
 #include <unordered_map>
@@ -67,17 +69,84 @@ bool is_numeric_type(const std::string& type) {
     return is_integer_type(type) || type == "Half" || type == "Float" || type == "Double";
 }
 
-std::string integer_conversion_target(const std::string& name) {
+std::string numeric_conversion_target(const std::string& name) {
     static const std::unordered_map<std::string, std::string> conversions{
         {"to_Byte", "Byte"}, {"to_U8", "U8"}, {"to_Int2", "Int2"},
         {"to_UInt2", "UInt2"}, {"to_Int", "Int"}, {"to_UInt", "UInt"},
-        {"to_Long", "Long"}, {"to_ULong", "ULong"}
+        {"to_Long", "Long"}, {"to_ULong", "ULong"}, {"to_Half", "Half"},
+        {"to_Float", "Float"}, {"to_Double", "Double"}
     };
     const auto conversion = conversions.find(name);
     return conversion == conversions.end() ? std::string{} : conversion->second;
 }
 
+bool valid_tensor_type(const std::string& type) {
+    constexpr std::string_view prefix = "Tensor<";
+    if (!type.starts_with(prefix) || type.size() <= prefix.size() + 3 ||
+        !type.ends_with("]>")) {
+        return false;
+    }
+    const auto dimensions_start = type.find(",[", prefix.size());
+    if (dimensions_start == std::string::npos) return false;
+    const auto element_type = type.substr(prefix.size(), dimensions_start - prefix.size());
+    if (!is_numeric_type(element_type)) return false;
+
+    const auto dimensions_end = type.size() - 2;
+    std::size_t start = dimensions_start + 2;
+    while (start < dimensions_end) {
+        const auto end = type.find(',', start);
+        const auto stop = end == std::string::npos || end > dimensions_end ? dimensions_end : end;
+        if (stop == start) return false;
+        const auto dimension = type.substr(start, stop - start);
+        if (dimension.front() >= '0' && dimension.front() <= '9') {
+            std::string digits;
+            for (const char character : dimension) {
+                if (character != '_') digits.push_back(character);
+            }
+            unsigned base = 10;
+            std::size_t prefix_length = 0;
+            if (digits.size() > 2 && digits[0] == '0') {
+                if (digits[1] == 'b' || digits[1] == 'B') { base = 2; prefix_length = 2; }
+                else if (digits[1] == 'o' || digits[1] == 'O') { base = 8; prefix_length = 2; }
+                else if (digits[1] == 'x' || digits[1] == 'X') { base = 16; prefix_length = 2; }
+            }
+            std::uint64_t value = 0;
+            const auto parsed = std::from_chars(digits.data() + prefix_length,
+                                                digits.data() + digits.size(), value,
+                                                static_cast<int>(base));
+            if (parsed.ec != std::errc{} || parsed.ptr != digits.data() + digits.size()) return false;
+        } else {
+            if (!(dimension.front() == '_' || (dimension.front() >= 'A' && dimension.front() <= 'Z') ||
+                  (dimension.front() >= 'a' && dimension.front() <= 'z'))) return false;
+            for (const char character : dimension) {
+                if (!(character == '_' || (character >= 'A' && character <= 'Z') ||
+                      (character >= 'a' && character <= 'z') ||
+                      (character >= '0' && character <= '9'))) return false;
+            }
+        }
+        start = stop + 1;
+    }
+    return start == dimensions_end + 1;
+}
+
+std::string range_element_type(const std::string& type);
+
+bool always_returns(const std::vector<std::unique_ptr<HirStmt>>& statements) {
+    for (const auto& statement : statements) {
+        if (statement->kind == HirStmtKind::Return) {
+            return true;
+        }
+        if (statement->kind == HirStmtKind::If && !statement->else_body.empty() &&
+            always_returns(statement->body) && always_returns(statement->else_body)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool is_known_type(const std::string& type, const std::unordered_set<std::string>& record_names) {
+    if (type.starts_with("Tensor<")) return valid_tensor_type(type);
+    if (const auto range_type = range_element_type(type); !range_type.empty()) return true;
     constexpr std::string_view list_prefix = "List<";
     if (type.compare(0, list_prefix.size(), list_prefix) == 0 &&
         type.size() > list_prefix.size() && type.back() == '>') {
@@ -96,6 +165,17 @@ std::string list_element_type(const std::string& type) {
     if (type.compare(0, list_prefix.size(), list_prefix) == 0 &&
         type.size() > list_prefix.size() && type.back() == '>') {
         return type.substr(list_prefix.size(), type.size() - list_prefix.size() - 1);
+    }
+    return {};
+}
+
+std::string range_element_type(const std::string& type) {
+    constexpr std::string_view range_prefix = "Range<";
+    if (type.compare(0, range_prefix.size(), range_prefix) == 0 &&
+        type.size() > range_prefix.size() && type.back() == '>') {
+        const auto element_type = type.substr(range_prefix.size(),
+                                              type.size() - range_prefix.size() - 1);
+        return is_integer_type(element_type) ? element_type : std::string{};
     }
     return {};
 }
@@ -208,6 +288,16 @@ std::vector<Diagnostic> verify_hir(const HirProgram& program) {
             }
             break;
         }
+        case HirExprKind::Range: {
+            const auto start_type = child_type(expression.left);
+            const auto end_type = child_type(expression.right);
+            if (!is_integer_type(start_type) || start_type != end_type ||
+                expression.type != "Range<" + start_type + ">") {
+                diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-029",
+                                       "range bounds and result type are inconsistent", expression.span});
+            }
+            break;
+        }
         case HirExprKind::Member: {
             const auto base_type = child_type(expression.left);
             const auto record = records.find(base_type);
@@ -271,7 +361,7 @@ std::vector<Diagnostic> verify_hir(const HirProgram& program) {
             }
             const auto target = functions.find(expression.symbol);
             if (target == functions.end()) {
-                const auto conversion_type = integer_conversion_target(expression.symbol);
+                const auto conversion_type = numeric_conversion_target(expression.symbol);
                 if (!conversion_type.empty()) {
                     const bool valid = argument_types.size() == 2 &&
                         expression.argument_names.size() == 2 &&
@@ -283,7 +373,7 @@ std::vector<Diagnostic> verify_hir(const HirProgram& program) {
                         argument_types[1] == "Bool" && expression.type == conversion_type;
                     if (!valid) {
                         diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-028",
-                                               "checked integer conversion has an invalid signature",
+                                               "checked numeric conversion has an invalid signature",
                                                expression.span});
                     }
                     break;
@@ -448,7 +538,8 @@ std::vector<Diagnostic> verify_hir(const HirProgram& program) {
                 }
                 break;
             case HirStmtKind::ForEach: {
-                const auto element_type = value_type == "Text" ? "Char" : list_element_type(value_type);
+                auto element_type = value_type == "Text" ? "Char" : list_element_type(value_type);
+                if (element_type.empty()) element_type = range_element_type(value_type);
                 if (statement->name.empty() || element_type.empty() || statement->type != element_type) {
                     diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-022",
                                            "for-each binding does not match its iterable element type",
@@ -464,6 +555,10 @@ std::vector<Diagnostic> verify_hir(const HirProgram& program) {
 
     for (const auto& function : program.functions) {
         verify_statements(function.body, function.return_type);
+        if (function.return_type != "Void" && !always_returns(function.body)) {
+            diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-026",
+                                   "non-Void function does not return on every path", function.span});
+        }
     }
     verify_statements(program.statements, "Void");
     return diagnostics;
@@ -484,6 +579,13 @@ std::string print_hir(const HirProgram& program) {
             output << '(' << expression.value << ' ';
             print_expression(*expression.left);
             output << ") : " << expression.type;
+            break;
+        case HirExprKind::Range:
+            output << "range ";
+            print_expression(*expression.left);
+            output << " .. ";
+            print_expression(*expression.right);
+            output << " : " << expression.type;
             break;
         case HirExprKind::Binary:
             output << '(' << expression.value << ' ';

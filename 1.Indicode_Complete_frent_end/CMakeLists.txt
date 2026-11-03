@@ -15,6 +15,7 @@ add_library(indicode_frontend
     src/sema.cpp
     src/ast_printer.cpp
     src/ast_json.cpp
+    src/ast_visitor.cpp
     src/hir.cpp
     src/diagnostic.cpp
     src/const_eval.cpp
@@ -70,6 +71,10 @@ if(BUILD_TESTING)
     add_executable(indicode_ast_printer_tests tests/ast_printer_tests.cpp)
     target_link_libraries(indicode_ast_printer_tests PRIVATE indicode_frontend)
     add_test(NAME ast_printer_tests COMMAND indicode_ast_printer_tests)
+
+    add_executable(indicode_ast_visitor_tests tests/ast_visitor_tests.cpp)
+    target_link_libraries(indicode_ast_visitor_tests PRIVATE indicode_frontend)
+    add_test(NAME ast_visitor_tests COMMAND indicode_ast_visitor_tests)
 
     add_executable(indicode_grammar_tests tests/grammar_tests.cpp)
     target_link_libraries(indicode_grammar_tests PRIVATE indicode_frontend)

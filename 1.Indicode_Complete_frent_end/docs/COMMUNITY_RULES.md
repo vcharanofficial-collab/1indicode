@@ -9,7 +9,7 @@ These rules protect the project's scope, build size, maintainability, and commun
 - This phase builds the Indicode language front end: source handling, lexer, parser, AST, name resolution, type checking, diagnostics, project-owned typed HIR, and verification.
 - Do not add machine-code generation, runtime execution, GPU/device backends, autodiff runtime, training systems, or unrelated product features to this front-end project.
 - Tensor types and statically knowable tensor shape checks belong to the planned front end; tensor execution and training do not.
-- Update the roadmap and [front-end completion plan](../Compiler_Front_End_Remaining_Work.pdf) before expanding the agreed scope. A catalogued feature is not automatically approved for the current milestone.
+- Update the roadmap and [front-end status report](./FRONT_END_STATUS_REPORT.md) before expanding the agreed scope. A catalogued feature is not automatically approved for the current milestone.
 
 ## 2. LLVM Must Not Be Bundled
 

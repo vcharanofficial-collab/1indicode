@@ -3,23 +3,25 @@
 **Status date:** 2026-11-03  
 **Scope:** Indicode compiler front end only. This plan replaces the previous all-area blueprint PDF.
 
+For the consolidated progress, completed-work summary, percentage breakdown, and remaining roadmap, see the [front-end status report](./FRONT_END_STATUS_REPORT.md) and its [PDF](../Compiler_Front_End_Status_Report.pdf).
+
 ## What “100%” means here
 
 The front end reads source, checks it, reports source-aware errors, and produces a semantically valid, independently verified Indicode HIR. It does not generate LLVM IR, machine code, executables, or run programs.
 
-The current progress report calculates a **96.95% weighted estimate**, displayed as **97%**. The estimated gap is **3.05 percentage points** on that judgment-based scale. This is not a claim that 97% of the language specification or 97% of the PDF catalogue is implemented.
+The current progress report calculates a **97.10% weighted estimate**, displayed as **97%**. The estimated gap is **2.90 percentage points** on that judgment-based scale. This is not a claim that 97% of the language specification or 97% of the PDF catalogue is implemented.
 
 The old PDF described a 777-concept catalogue across the whole language/compiler project. Only **40 catalogue entries (IDs 445–484)** are in its compiler-front-end section. In the current implementation audit:
 
 | Front-end catalogue status | Count |
 |---|---:|
-| Implemented to the v1 scoped acceptance level | 28 |
+| Implemented to the v1 scoped acceptance level | 30 |
 | Partially implemented; more acceptance work remains | 0 |
-| Not implemented yet | 12 |
+| Not implemented yet | 10 |
 | **Front-end catalogue total** | **40** |
-| **Still unfinished (partial + not implemented)** | **12** |
+| **Still unfinished (partial + not implemented)** | **10** |
 
-These inventory counts and the 96.95% weighted estimate measure different things. The remaining 737 entries in the full catalogue are outside this front-end-only plan; this is not a claim that they are complete.
+These inventory counts and the 97.10% weighted estimate measure different things. The remaining 737 entries in the full catalogue are outside this front-end-only plan; this is not a claim that they are complete.
 
 ## Remaining catalogue entries
 
@@ -35,17 +37,17 @@ These inventory counts and the 96.95% weighted estimate measure different things
 | 450 | UTF-8 validator | Done | Malformed UTF-8 is diagnosed in source tokens, strings, and comments. |
 | 451 | Token kind | Done | Public token kinds cover every v1 punctuation/operator and invalid/EOF states; keywords have a typed 14-value inventory, and comments are represented as trivia. |
 | 452 | Token payload | Done | Keywords, radix integers, normalized floats, and escape-preserving string contents have typed payloads; focused tests also verify original spelling and source spans. |
-| 453 | Lexer state | Done | Maintain deterministic EOF/error state and multi-error recovery tests. |
+| 453 | Lexer state | Done | EOF handling is deterministic; malformed-input recovery and lexer robustness are covered by focused and smoke tests. |
 | 454 | Trivia preservation | Done | Whitespace and line/nested-block comments retain exact source spelling and spans separately from parser tokens; block-comment newline separators remain tokens. |
-| 455 | Parser state | Done | Retain explicit parser position/error state and add boundary and malformed-input tests. |
-| 456 | Recursive descent parser | Done | Implements every declaration, statement, and type form accepted by the normative v1 grammar; imports and generic declarations are explicitly excluded. Parser error recovery remains tracked separately. |
+| 455 | Parser state | Done | Parser position and error state are explicit; boundary, malformed-input, and progress tests pass. |
+| 456 | Recursive descent parser | Done | Implements every declaration, statement, and type form accepted by the normative v1 grammar; imports and generic declarations are excluded. Recovery is completed and tracked separately under 464–465. |
 | 457 | Pratt expression parser | Done | Normative precedence/associativity and postfix rules have coverage for every binary operator, prefix nesting, and member/index binding. |
 | 458 | Grammar version | Done | Public grammar version 1.0.0 matches the normative syntax specification; syntax contract and compatibility policy are documented and checked. |
-| 459 | AST context | Not started | Add a clear AST owner/context and lifetime contract for parsed programs and source references. |
+| 459 | AST context | Done | [AST_CONTEXT_V1.md](./AST_CONTEXT_V1.md) specifies that `Program` owns the AST, parser tokens are borrowed only during parsing, and source text must be retained separately to render spans. A returned program is tested after parser/source destruction. |
 | 460 | AST node arena | Not started | Use an arena or document/measure an alternative ownership design; test destruction and large-input behavior. |
-| 461 | AST visitor | Not started | Provide exhaustive, type-safe visitors and tests that every node kind is visited. |
+| 461 | AST visitor | Done | Public `AstVisitor` has required callbacks for every declaration, statement kind, and expression kind; `walk_ast` traverses the full tree and tests assert complete kind coverage. |
 | 462 | AST printer | Done | Deterministic golden output covers every v1 declaration, statement, expression kind, prefix operator, and binary operator. |
-| 463 | AST serializer | Done | Keep schema-v1 JSON tests for every node and span; define compatibility policy before treating the schema as stable. |
+| 463 | AST serializer | Done | AST JSON schema version 1 serializes declarations, node kinds, names, arguments, and source spans; structure, escaping, and schema-version output are tested. Cross-version compatibility guarantees remain part of broader release policy. |
 | 464 | Syntax recovery | Done | Declaration, statement, and delimited-expression recovery preserve later declarations and valid sibling expressions; malformed-input tests verify diagnostics and retained AST nodes. |
 | 465 | Error synchronization | Done | [ERROR_RECOVERY_V1.md](./ERROR_RECOVERY_V1.md) specifies synchronization boundaries; regression tests cover multiple errors and cascading-error suppression. |
 | 466 | Symbol identity | Done | Stable per-analysis identities cover v1 values, functions, record types/fields, builtin types/functions, and references, with HIR identity verification. Module/import/overload identities are excluded by v1 and tracked under 468–470. |
@@ -109,9 +111,9 @@ Implement these in dependency order. A work package is accepted only when its sp
 
 Report **100% for the agreed v1 front-end scope only** after all of the following are true:
 
-1. The v1 contract is versioned and every required feature in the table has an accepted implementation; deferred features are explicitly approved as out of scope.
+1. The v1 contract is versioned and every required feature in the table has an accepted implementation; any catalogue item outside v1 has an explicit scope decision and remains visibly tracked as future work.
 2. Every requirement maps to passing tests, including malformed input, diagnostics, recovery, and typed HIR invariants.
-3. Full conformance, fuzz, sanitizer, clean-build, and package-consumer checks pass in CI.
-4. No known required item remains partial or unimplemented; documentation and acceptance evidence are current.
+3. Full v1 conformance, fuzz, sanitizer, clean-build, and package-consumer checks pass in CI.
+4. No known required v1 item remains partial or unimplemented; documentation and acceptance evidence are current.
 
-The 18-test suite passing is evidence for its tested cases, not by itself proof of 100% language or production readiness. LLVM, machine-code generation, runtime execution, and AI/device backends remain outside this plan.
+The current 19-test suite passing is evidence for its tested cases, not by itself proof of 100% language or production readiness. LLVM, machine-code generation, runtime execution, and AI/device backends remain outside this plan.

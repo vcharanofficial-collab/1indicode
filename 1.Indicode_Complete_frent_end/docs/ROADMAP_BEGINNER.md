@@ -8,7 +8,7 @@ We are building the part of a compiler that reads Indicode source code and check
 
 LLVM is a large, separate compiler framework. This project does **not** download, copy, or build LLVM. Our front end and its tests must keep working without LLVM. Connecting an optional backend is a later project stage, after the front end has a stable typed representation.
 
-The [front-end completion plan](../Compiler_Front_End_Remaining_Work.pdf) is the source of truth for remaining front-end work. The previous all-area blueprint's 777 concepts were not 777 front-end requirements; the front-end section contains 40 catalogue entries. The editable audit now has 28 implemented to v1 scope, 0 partial, and 12 not started. See the [versioned grammar specification](LANGUAGE_SPEC_V1.md) and [semantic rules](SEMANTICS_V1.md).
+The [front-end status report](./FRONT_END_STATUS_REPORT.md) and its [summary PDF](../Compiler_Front_End_Status_Report.pdf) summarize completed and remaining work; the [detailed 40-item audit PDF](../Compiler_Front_End_Remaining_Work.pdf) lists each catalogue item. The previous all-area blueprint's 777 concepts were not 777 front-end requirements; the front-end section contains 40 catalogue entries. The editable audit now has 30 implemented to v1 scope, 0 partial, and 10 not started. See the [versioned grammar specification](LANGUAGE_SPEC_V1.md), [semantic rules](SEMANTICS_V1.md), and [AST ownership contract](AST_CONTEXT_V1.md).
 
 ## Current Overall Progress: 97%
 
@@ -31,7 +31,8 @@ The estimate uses the weighted acceptance areas in `PROGRESS.md`:
 - Parser synchronization preserves valid siblings across expression errors and later statements after malformed declarations.
 - Bounded constant evaluation, conservative control-flow/return checks, and exact static tensor-shape rules are specified and tested.
 - Diagnostic schema v1 covers locations, notes, fixes, escaping, and deterministic full-output golden behavior.
-- Updated weighted estimate: **96.95%, rounded to 97%** (see `PROGRESS.md` and the [completion plan](../Compiler_Front_End_Remaining_Work.pdf)).
+- The AST now has an exhaustive kind-specific visitor and a documented owner/lifetime contract (see `AST_CONTEXT_V1.md`).
+- Updated weighted estimate: **97.10%, rounded to 97%** (see `PROGRESS.md` and the [front-end status report](./FRONT_END_STATUS_REPORT.md)).
 
 This is an estimate, not a marketing score. It may go down if a review finds missing acceptance behavior. Passing tests prove only the tested cases, not completeness of the language.
 
@@ -54,7 +55,7 @@ This is an estimate, not a marketing score. It may go down if a review finds mis
 - Tensor function signatures support numeric element types and static or symbolic dimensions, such as `Tensor<Float, [Batch, 784]>`; incompatible shapes are rejected by exact type checking.
 - Integer ranges such as `0..10` are parsed and type-checked; `for item in 0..10` binds `item` to the bound integer type.
 - `else if` chains are parsed into nested conditionals, and each branch participates in non-`Void` return-path checks.
-- Eighteen CTest cases include source-manager line/column checks, lexer payload/trivia checks, grammar version and precedence checks, AST-printer golden output, AST and typed-HIR JSON validation, parser recovery/fix-its, HIR symbol/scope checks, an installed-package consumer, a deterministic malformed-input smoke test, tensor shapes, and record/conversion samples.
+- Nineteen CTest cases include source-manager line/column checks, lexer payload/trivia checks, grammar version and precedence checks, AST-printer golden output, exhaustive AST visitor/lifetime checks, AST and typed-HIR JSON validation, parser recovery/fix-its, HIR symbol/scope checks, an installed-package visitor consumer, a deterministic malformed-input smoke test, tensor shapes, and record/conversion samples.
 
 ## Newly Supported Syntax
 

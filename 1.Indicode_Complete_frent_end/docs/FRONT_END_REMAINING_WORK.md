@@ -13,11 +13,11 @@ The old PDF described a 777-concept catalogue across the whole language/compiler
 
 | Front-end catalogue status | Count |
 |---|---:|
-| Implemented to the current scoped acceptance level | 9 |
-| Partially implemented; more acceptance work remains | 17 |
-| Not implemented yet | 14 |
+| Implemented to the current scoped acceptance level | 15 |
+| Partially implemented; more acceptance work remains | 13 |
+| Not implemented yet | 12 |
 | **Front-end catalogue total** | **40** |
-| **Still unfinished (partial + not implemented)** | **31** |
+| **Still unfinished (partial + not implemented)** | **25** |
 
 These inventory counts and the 95.20% weighted estimate measure different things. The remaining 737 entries in the full catalogue are outside this front-end-only plan; this is not a claim that they are complete.
 
@@ -33,14 +33,14 @@ These inventory counts and the 95.20% weighted estimate measure different things
 | 448 | Line table | Done | CR, LF, and CRLF line boundaries, including trailing empty lines, are tested. |
 | 449 | Column mapping | Done | Byte offsets, UTF-8 scalar columns, and tab stops are distinct and tested; terminal width policy is tracked under diagnostics. |
 | 450 | UTF-8 validator | Done | Malformed UTF-8 is diagnosed in source tokens, strings, and comments. |
-| 451 | Token kind | Partial | Finish the v1 token inventory, including invalid tokens, comments/trivia representation, and every operator/keyword. |
-| 452 | Token payload | Partial | Define typed literal payloads and preserved source spelling; test payload values and spans for all literal forms. |
+| 451 | Token kind | Done | Public token kinds cover every v1 punctuation/operator and invalid/EOF states; keywords have a typed 14-value inventory, and comments are represented as trivia. |
+| 452 | Token payload | Done | Keywords, radix integers, normalized floats, and escape-preserving string contents have typed payloads; focused tests also verify original spelling and source spans. |
 | 453 | Lexer state | Done | Maintain deterministic EOF/error state and multi-error recovery tests. |
-| 454 | Trivia preservation | Not started | Preserve comments/whitespace as trivia for formatter/documentation consumers without changing parser behavior. |
+| 454 | Trivia preservation | Done | Whitespace and line/nested-block comments retain exact source spelling and spans separately from parser tokens; block-comment newline separators remain tokens. |
 | 455 | Parser state | Done | Retain explicit parser position/error state and add boundary and malformed-input tests. |
-| 456 | Recursive descent parser | Partial | Implement the versioned v1 declaration, statement, and type grammar, including imports and generic declarations if accepted in v1. |
-| 457 | Pratt expression parser | Partial | Specify the complete operator table, associativity, postfix forms, and precedence; add exhaustive precedence tests. |
-| 458 | Grammar version | Not started | Version the grammar, document compatibility/change policy, and test that docs and parser agree. |
+| 456 | Recursive descent parser | Done | Implements every declaration, statement, and type form accepted by the normative v1 grammar; imports and generic declarations are explicitly excluded. Parser error recovery remains tracked separately. |
+| 457 | Pratt expression parser | Done | Normative precedence/associativity and postfix rules have coverage for every binary operator, prefix nesting, and member/index binding. |
+| 458 | Grammar version | Done | Public grammar version 1.0.0 matches the normative syntax specification; syntax contract and compatibility policy are documented and checked. |
 | 459 | AST context | Not started | Add a clear AST owner/context and lifetime contract for parsed programs and source references. |
 | 460 | AST node arena | Not started | Use an arena or document/measure an alternative ownership design; test destruction and large-input behavior. |
 | 461 | AST visitor | Not started | Provide exhaustive, type-safe visitors and tests that every node kind is visited. |
@@ -114,4 +114,4 @@ Report **100% for the agreed v1 front-end scope only** after all of the followin
 3. Full conformance, fuzz, sanitizer, clean-build, and package-consumer checks pass in CI.
 4. No known required item remains partial or unimplemented; documentation and acceptance evidence are current.
 
-The 17-test suite passing is evidence for its tested cases, not by itself proof of 100% language or production readiness. LLVM, machine-code generation, runtime execution, and AI/device backends remain outside this plan.
+The 18-test suite passing is evidence for its tested cases, not by itself proof of 100% language or production readiness. LLVM, machine-code generation, runtime execution, and AI/device backends remain outside this plan.

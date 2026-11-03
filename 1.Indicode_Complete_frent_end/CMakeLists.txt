@@ -70,6 +70,13 @@ if(BUILD_TESTING)
     target_link_libraries(indicode_ast_printer_tests PRIVATE indicode_frontend)
     add_test(NAME ast_printer_tests COMMAND indicode_ast_printer_tests)
 
+    add_executable(indicode_grammar_tests tests/grammar_tests.cpp)
+    target_link_libraries(indicode_grammar_tests PRIVATE indicode_frontend)
+    target_compile_definitions(indicode_grammar_tests PRIVATE
+        INDICODE_SPEC_PATH="${CMAKE_CURRENT_SOURCE_DIR}/docs/LANGUAGE_SPEC_V1.md"
+    )
+    add_test(NAME grammar_tests COMMAND indicode_grammar_tests)
+
     add_executable(indicode_sema_tests tests/sema_tests.cpp)
     target_link_libraries(indicode_sema_tests PRIVATE indicode_frontend)
     add_test(NAME sema_tests COMMAND indicode_sema_tests)

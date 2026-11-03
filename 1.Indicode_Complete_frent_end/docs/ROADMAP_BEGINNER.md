@@ -8,7 +8,7 @@ We are building the part of a compiler that reads Indicode source code and check
 
 LLVM is a large, separate compiler framework. This project does **not** download, copy, or build LLVM. Our front end and its tests must keep working without LLVM. Connecting an optional backend is a later project stage, after the front end has a stable typed representation.
 
-The [front-end completion plan](../Compiler_Front_End_Remaining_Work.pdf) is the source of truth for remaining front-end work. The previous all-area blueprint's 777 concepts were not 777 front-end requirements; the front-end section contained 40 catalogue entries, of which the audit lists 10 implemented, 16 partial, and 14 not started.
+The [front-end completion plan](../Compiler_Front_End_Remaining_Work.pdf) is the source of truth for remaining front-end work. The previous all-area blueprint's 777 concepts were not 777 front-end requirements; the front-end section contains 40 catalogue entries. The editable audit has 15 implemented, 13 partial, and 12 not started. See the [versioned grammar specification](LANGUAGE_SPEC_V1.md) for syntax v1.0.0.
 
 ## Current Overall Progress: 95%
 
@@ -25,6 +25,7 @@ The estimate uses the weighted acceptance areas in `PROGRESS.md`:
 - Local variables, parameters, and loop bindings receive stable IDs that are checked through HIR lowering and independent HIR verification.
 - The library can be installed and used by a separate CMake consumer project.
 - The source manager owns source buffers and maps byte offsets through indexed line tables, including CR/LF/CRLF, UTF-8 scalar columns, and tabs.
+- Lexer tokens retain typed keyword/literal payloads, and comments and whitespace are preserved as source-spanned trivia; the recursive-descent and Pratt grammar is specified and versioned as v1.0.0.
 - `indicode typed-json` emits verified HIR as JSON with a schema version and stable local binding IDs; deserialization and a compatibility policy are still future work.
 - `indicode ast-json` serializes parsed declarations and syntax nodes with source spans; golden snapshots and a compatibility policy remain future work.
 - Updated weighted estimate: **95.20%, rounded to 95%** (see `PROGRESS.md` and the [completion plan](../Compiler_Front_End_Remaining_Work.pdf)).
@@ -50,7 +51,7 @@ This is an estimate, not a marketing score. It may go down if a review finds mis
 - Tensor function signatures support numeric element types and static or symbolic dimensions, such as `Tensor<Float, [Batch, 784]>`; incompatible shapes are rejected by exact type checking.
 - Integer ranges such as `0..10` are parsed and type-checked; `for item in 0..10` binds `item` to the bound integer type.
 - `else if` chains are parsed into nested conditionals, and each branch participates in non-`Void` return-path checks.
-- Seventeen CTest cases include source-manager line/column checks, AST-printer golden output, AST and typed-HIR JSON validation, parser recovery/fix-its, HIR symbol/scope checks, an installed-package consumer, a deterministic malformed-input smoke test, tensor shapes, and record/conversion samples.
+- Eighteen CTest cases include source-manager line/column checks, lexer payload/trivia checks, grammar version and precedence checks, AST-printer golden output, AST and typed-HIR JSON validation, parser recovery/fix-its, HIR symbol/scope checks, an installed-package consumer, a deterministic malformed-input smoke test, tensor shapes, and record/conversion samples.
 
 ## Newly Supported Syntax
 

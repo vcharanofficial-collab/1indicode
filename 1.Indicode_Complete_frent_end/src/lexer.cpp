@@ -53,19 +53,6 @@ std::size_t utf8_sequence_length(const std::string& text, std::size_t offset) {
     return length;
 }
 
-bool is_keyword(const std::string& value) {
-    static constexpr std::array keywords{
-        "function", "record", "return", "if", "else", "repeat", "times", "for", "in",
-        "while", "let", "var", "true", "false"
-    };
-    for (const auto* keyword : keywords) {
-        if (value == keyword) {
-            return true;
-        }
-    }
-    return false;
-}
-
 }
 
 std::string token_kind_name(TokenKind kind) {
@@ -106,6 +93,51 @@ std::string token_kind_name(TokenKind kind) {
     case TokenKind::OrOr: return "OrOr";
     case TokenKind::Invalid: return "Invalid";
     case TokenKind::EndOfFile: return "EndOfFile";
+    }
+    return "Unknown";
+}
+
+std::string keyword_name(Keyword keyword) {
+    switch (keyword) {
+    case Keyword::Function: return "function";
+    case Keyword::Record: return "record";
+    case Keyword::Return: return "return";
+    case Keyword::If: return "if";
+    case Keyword::Else: return "else";
+    case Keyword::Repeat: return "repeat";
+    case Keyword::Times: return "times";
+    case Keyword::For: return "for";
+    case Keyword::In: return "in";
+    case Keyword::While: return "while";
+    case Keyword::Let: return "let";
+    case Keyword::Var: return "var";
+    case Keyword::True: return "true";
+    case Keyword::False: return "false";
+    }
+    return "invalid";
+}
+
+bool keyword_from_name(const std::string& name, Keyword& keyword) {
+    static constexpr std::array keywords{
+        Keyword::Function, Keyword::Record, Keyword::Return, Keyword::If,
+        Keyword::Else, Keyword::Repeat, Keyword::Times, Keyword::For,
+        Keyword::In, Keyword::While, Keyword::Let, Keyword::Var,
+        Keyword::True, Keyword::False
+    };
+    for (const auto candidate : keywords) {
+        if (name == keyword_name(candidate)) {
+            keyword = candidate;
+            return true;
+        }
+    }
+    return false;
+}
+
+std::string trivia_kind_name(TriviaKind kind) {
+    switch (kind) {
+    case TriviaKind::Whitespace: return "Whitespace";
+    case TriviaKind::LineComment: return "LineComment";
+    case TriviaKind::BlockComment: return "BlockComment";
     }
     return "Unknown";
 }
@@ -160,8 +192,22 @@ SourceLocation Lexer::location() const {
 }
 
 void Lexer::add_token(TokenKind kind, SourceLocation start) {
+    add_token(kind, start, {});
+}
+
+void Lexer::add_token(TokenKind kind, SourceLocation start, TokenPayload payload) {
     const auto end = location();
     result_.tokens.push_back({
+        kind,
+        source_.contents.substr(start.offset, end.offset - start.offset),
+        {start, end},
+        std::move(payload)
+    });
+}
+
+void Lexer::add_trivia(TriviaKind kind, SourceLocation start) {
+    const auto end = location();
+    result_.trivia.push_back({
         kind,
         source_.contents.substr(start.offset, end.offset - start.offset),
         {start, end}
@@ -182,6 +228,7 @@ void Lexer::scan_token() {
     case ' ':
     case '\t':
     case '\f':
+        add_trivia(TriviaKind::Whitespace, start);
         return;
     case '\r':
         if (current() == '\n') {
@@ -200,6 +247,7 @@ void Lexer::scan_token() {
         while (!at_end() && current() != '\n' && current() != '\r') {
             scan_comment_character();
         }
+        add_trivia(TriviaKind::LineComment, start);
         return;
     case '(': add_token(TokenKind::LeftParen, start); return;
     case ')': add_token(TokenKind::RightParen, start); return;
@@ -216,6 +264,7 @@ void Lexer::scan_token() {
     case '/':
         if (match('*')) {
             scan_block_comment(start);
+            add_trivia(TriviaKind::BlockComment, start);
         } else {
             add_token(TokenKind::Slash, start);
         }
@@ -272,7 +321,12 @@ void Lexer::scan_identifier(SourceLocation start) {
         advance();
     }
     const auto lexeme = source_.contents.substr(start.offset, offset_ - start.offset);
-    add_token(is_keyword(lexeme) ? TokenKind::Keyword : TokenKind::Identifier, start);
+    Keyword keyword{};
+    if (keyword_from_name(lexeme, keyword)) {
+        add_token(TokenKind::Keyword, start, KeywordPayload{keyword});
+    } else {
+        add_token(TokenKind::Identifier, start);
+    }
 }
 
 void Lexer::scan_number(SourceLocation start) {
@@ -344,7 +398,20 @@ void Lexer::scan_number(SourceLocation start) {
         return;
     }
 
-    add_token(is_float ? TokenKind::FloatLiteral : TokenKind::IntegerLiteral, start);
+    const auto spelling = source_.contents.substr(start.offset, offset_ - start.offset);
+    std::string normalized;
+    normalized.reserve(spelling.size());
+    for (const char character : spelling) {
+        if (character != '_') normalized.push_back(character);
+    }
+    if (is_float) {
+        add_token(TokenKind::FloatLiteral, start, FloatLiteralPayload{std::move(normalized)});
+    } else {
+        const std::size_t prefix_length = base == 10 ? 0 : 2;
+        add_token(TokenKind::IntegerLiteral, start,
+                  IntegerLiteralPayload{static_cast<std::uint8_t>(base),
+                                        normalized.substr(prefix_length)});
+    }
 }
 
 void Lexer::scan_string(SourceLocation start) {
@@ -421,7 +488,16 @@ void Lexer::scan_string(SourceLocation start) {
         add_token(TokenKind::Invalid, start);
         return;
     }
-    add_token(valid ? TokenKind::StringLiteral : TokenKind::Invalid, start);
+    if (valid) {
+        const auto end = location();
+        const auto contents_start = start.offset + 1;
+        const auto contents_end = end.offset - 1;
+        add_token(TokenKind::StringLiteral, start,
+                  StringLiteralPayload{source_.contents.substr(contents_start,
+                                                               contents_end - contents_start)});
+    } else {
+        add_token(TokenKind::Invalid, start);
+    }
 }
 
 void Lexer::scan_comment_character() {

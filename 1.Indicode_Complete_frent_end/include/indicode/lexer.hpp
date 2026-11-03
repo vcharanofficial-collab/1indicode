@@ -10,6 +10,7 @@ namespace indicode {
 
 struct LexResult {
     std::vector<Token> tokens;
+    std::vector<Trivia> trivia;
     std::vector<Diagnostic> diagnostics;
 };
 
@@ -33,6 +34,8 @@ private:
     bool match(char expected);
     SourceLocation location() const;
     void add_token(TokenKind kind, SourceLocation start);
+    void add_token(TokenKind kind, SourceLocation start, TokenPayload payload);
+    void add_trivia(TriviaKind kind, SourceLocation start);
     void add_error(std::string code, std::string message, SourceLocation start);
     void scan_token();
     void scan_identifier(SourceLocation start);

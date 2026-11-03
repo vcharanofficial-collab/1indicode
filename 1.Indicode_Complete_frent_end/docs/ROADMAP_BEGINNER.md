@@ -10,16 +10,15 @@ LLVM is a large, separate compiler framework. This project does **not** download
 
 The PDF is a blueprint, not a list of features already completed. Its 777 concepts are a long-term catalogue, not 777 built-in types or a promise to implement every idea immediately.
 
-## Current Overall Progress: 40%
+## Current Overall Progress: 60%
 
-This percentage means estimated completion of the **front-end work needed before a future LLVM adapter**. It does not mean 40% of LLVM, machine-code generation, a GPU compiler, or the AI runtime is complete.
+This percentage means estimated completion of the **front-end work needed before a future LLVM adapter**. It does not mean 60% of LLVM, machine-code generation, a GPU compiler, or the AI runtime is complete.
 
 The estimate uses the weighted acceptance areas in `PROGRESS.md`:
 
-- Before this update: 29.75%.
-- Typed HIR has a 15% weight. Its current completion is estimated at 65%, based on project-owned typed nodes, AST lowering, a verifier, a printer, tests, and CLI use. Contribution: 15% x 65% = 9.75%.
-- HIR tests plus the beginner roadmap and community rules improve the tests/docs area from 40% to 45%, contributing another 0.5%.
-- New total: 29.75% + 9.75% + 0.5% = **40.0%**.
+- Previous measured total: 40.0%.
+- New work adds 20.4 weighted points across diagnostics, UTF-8 strings, collection syntax/types, HIR verification, CLI JSON output, and tests/docs.
+- New total: 40.0% + 20.4% = 60.4%, rounded to **60%**.
 
 This is an estimate, not a marketing score. It may go down if a review finds missing acceptance behavior. Passing tests prove only the tested cases, not completeness of the language.
 
@@ -31,19 +30,55 @@ This is an estimate, not a marketing score. It may go down if a review finds mis
 - Semantic checks catch selected name, type, mutability, function-call, return, and integer-range errors.
 - The compiler lowers checked AST into project-owned typed HIR (High-level Intermediate Representation: a simpler, explicitly typed form of the program).
 - The HIR verifier checks required type annotations, expression/operator types, function calls, and return types.
-- `indicode check`, `tokens`, `ast`, and `typed` work for the current subset.
-- Six CTest cases cover lexer, parser, semantics, HIR, and CLI acceptance/rejection.
+- Lists can be created, indexed, and iterated with `for`; text can also be iterated/indexed as `Char` values.
+- String contents are UTF-8 validated; supported escapes include Unicode scalar escapes such as `\u{e9}`. A single Unicode scalar infers `Char`, more infer `Text`.
+- `indicode check`, `tokens`, `ast`, `typed`, and opt-in `--json-diagnostics` work for the current subset.
+- Eight CTest cases cover lexer, parser, semantics, HIR, diagnostics, and CLI behavior.
+
+## Newly Supported Syntax
+
+Lists are written with square brackets. A non-empty list must contain values of one type. Its type is inferred from those values.
+
+```indi
+items = [20, 22]
+answer = items[0]
+
+for item in items {
+	say(item)
+}
+```
+
+An index must be an `Int`, and the collection type must support indexing. This front end checks types only; it does not execute programs or perform runtime bounds checks. Text indexing and iteration produce one `Char` Unicode scalar at a time.
+
+```indi
+accent = "\u{e9}"  # one Unicode scalar, so this is Char
+message = "hello"   # multiple scalars, so this is Text
+for letter in message {
+	say(letter)
+}
+```
+
+Invalid cases are rejected with stable diagnostics:
+
+```indi
+mixed = [1, "two"]       # E-SEMA-025: list elements need one type
+wrong_index = items[true] # E-SEMA-026: index must be Int
+for value in 5 { say(value) } # E-SEMA-023: Int is not iterable
+bad_text = "\q"           # E-LEX-007: unsupported string escape
+```
+
+The current grammar does not yet provide a type annotation syntax for an empty list, so `[]` is rejected until that syntax is designed.
 
 ## Roadmap
 
 | Stage | Status | In plain language | Completion evidence |
 | --- | --- | --- | --- |
 | 1. Project foundation | Mostly done | Build the project without large external frameworks. | C++20/CMake build and CTest work without LLVM or network downloads. |
-| 2. Source and lexer | Started | Read characters and recognize names, numbers, strings, punctuation, and errors. | UTF-8 validation, full literal/comment coverage, exact source positions, negative tests. |
-| 3. Parser and AST | Started | Recognize the language's grammar and record its structure. | Full core grammar, recovery, precedence, spans, AST golden tests. |
-| 4. Names and types | Started | Decide what names refer to and whether operations use compatible types. | Scope rules, conversions, overflow, return paths, and negative diagnostics are specified and tested. |
-| 5. Typed HIR | **Started; core slice implemented** | Convert checked source into our own typed representation. | More language coverage, stable IDs, effects/conversions, verifier invariants and serialization tests. |
-| 6. Diagnostics and tools | Started | Make errors useful to people and editors. | Stable source excerpts, JSON output, precise spans, and recovery tests. |
+| 2. Source and lexer | Started | Read characters and recognize names, numbers, strings, punctuation, and errors. | Unicode identifiers, complete numeric syntax, raw/block comments, and full source display-column mapping. |
+| 3. Parser and AST | Started | Recognize the language's grammar and record its structure. | Member access, named arguments, complete newline rules, AST golden tests, full recovery. |
+| 4. Names and types | Started | Decide what names refer to and whether operations use compatible types. | Modules, imports, conversions, overflow, ownership/effects, tensor shapes, and negative diagnostics. |
+| 5. Typed HIR | **Started; more core syntax implemented** | Convert checked source into our own typed representation. | More language coverage, stable IDs, effects/conversions, verifier invariants, serialization/versioning. |
+| 6. Diagnostics and tools | Started | Make errors useful to people and editors. | JSON schema stability, fix-its, editor interfaces, and complete recovery diagnostics. |
 | 7. Front-end acceptance | Not complete | Prove the documented front-end subset works reliably. | Conformance suite, fuzz/property tests, sanitizers, CI, docs, and repeatable clean builds. |
 | 8. Optional LLVM adapter | Not started | Connect verified Indicode HIR to an external LLVM installation. | Separate opt-in adapter, no vendored LLVM, backend integration tests, documented external setup. |
 

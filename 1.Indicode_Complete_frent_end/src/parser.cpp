@@ -185,6 +185,9 @@ std::unique_ptr<Stmt> Parser::statement() {
     if (match_keyword("repeat")) {
         return repeat_statement(previous());
     }
+    if (match_keyword("for")) {
+        return for_each_statement(previous());
+    }
     if (match(TokenKind::Identifier)) {
         const auto identifier = previous();
         if (check(TokenKind::Identifier)) {
@@ -316,6 +319,29 @@ std::unique_ptr<Stmt> Parser::repeat_statement(const Token& keyword) {
     return result;
 }
 
+std::unique_ptr<Stmt> Parser::for_each_statement(const Token& keyword) {
+    const auto* name = consume_identifier("expected loop variable after 'for'");
+    if (name == nullptr || !match_keyword("in")) {
+        error(peek(), "expected 'in' after loop variable");
+        return nullptr;
+    }
+    auto iterable = expression();
+    if (!iterable || consume(TokenKind::LeftBrace, "expected '{' after for-each iterable") == nullptr) {
+        return nullptr;
+    }
+
+    auto result = std::make_unique<Stmt>();
+    result->kind = StmtKind::ForEach;
+    result->name = name->lexeme;
+    result->span.start = keyword.span.start;
+    result->expression = std::move(iterable);
+    if (!block(result->body)) {
+        return nullptr;
+    }
+    result->span.end = previous().span.end;
+    return result;
+}
+
 bool Parser::block(std::vector<std::unique_ptr<Stmt>>& statements) {
     skip_separators();
     while (!check(TokenKind::RightBrace) && !at_end()) {
@@ -399,10 +425,28 @@ std::unique_ptr<Expr> Parser::primary() {
         result->kind = ExprKind::Name;
         result->value = previous().lexeme;
         result->span = previous().span;
-        if (match(TokenKind::LeftParen)) {
-            return finish_call(std::move(result));
+        return finish_postfix(std::move(result));
+    }
+
+    if (match(TokenKind::LeftBracket)) {
+        auto result = std::make_unique<Expr>();
+        result->kind = ExprKind::ListLiteral;
+        const auto start = previous().span.start;
+        if (!check(TokenKind::RightBracket)) {
+            do {
+                auto element = expression();
+                if (!element) {
+                    return nullptr;
+                }
+                result->arguments.push_back(std::move(element));
+            } while (match(TokenKind::Comma));
         }
-        return result;
+        const auto* closing = consume(TokenKind::RightBracket, "expected ']' after list elements");
+        if (closing == nullptr) {
+            return nullptr;
+        }
+        result->span = {start, closing->span.end};
+        return finish_postfix(std::move(result));
     }
 
     if (match(TokenKind::LeftParen)) {
@@ -415,6 +459,35 @@ std::unique_ptr<Expr> Parser::primary() {
 
     error(peek(), "expected an expression");
     return nullptr;
+}
+
+std::unique_ptr<Expr> Parser::finish_postfix(std::unique_ptr<Expr> expression) {
+    while (true) {
+        if (check(TokenKind::LeftParen) && expression->kind == ExprKind::Name) {
+            advance();
+            expression = finish_call(std::move(expression));
+            if (!expression) {
+                return nullptr;
+            }
+        } else if (match(TokenKind::LeftBracket)) {
+            auto index = this->expression();
+            if (!index) {
+                return nullptr;
+            }
+            const auto* closing = consume(TokenKind::RightBracket, "expected ']' after index");
+            if (closing == nullptr) {
+                return nullptr;
+            }
+            auto indexed = std::make_unique<Expr>();
+            indexed->kind = ExprKind::Index;
+            indexed->span = {expression->span.start, closing->span.end};
+            indexed->left = std::move(expression);
+            indexed->right = std::move(index);
+            expression = std::move(indexed);
+        } else {
+            return expression;
+        }
+    }
 }
 
 std::unique_ptr<Expr> Parser::finish_call(std::unique_ptr<Expr> callee) {

@@ -45,11 +45,13 @@ private:
     std::unique_ptr<Stmt> if_statement(const Token& keyword);
     std::unique_ptr<Stmt> while_statement(const Token& keyword);
     std::unique_ptr<Stmt> repeat_statement(const Token& keyword);
+    std::unique_ptr<Stmt> for_each_statement(const Token& keyword);
     bool block(std::vector<std::unique_ptr<Stmt>>& statements);
     std::unique_ptr<Expr> expression();
     std::unique_ptr<Expr> parse_precedence(int minimum_precedence);
     std::unique_ptr<Expr> unary();
     std::unique_ptr<Expr> primary();
+    std::unique_ptr<Expr> finish_postfix(std::unique_ptr<Expr> expression);
     std::unique_ptr<Expr> finish_call(std::unique_ptr<Expr> callee);
     static int precedence(TokenKind kind);
 };

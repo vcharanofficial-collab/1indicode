@@ -3,5 +3,10 @@ function add(a: Int, b: Int) -> Int {
 }
 
 Int2 score = 30000
-answer = add(20, 22)
+items = [20, 22]
+answer = add(items[0], items[1])
+for item in items {
+    say(item)
+}
+accent = "\u{e9}"
 say(answer)

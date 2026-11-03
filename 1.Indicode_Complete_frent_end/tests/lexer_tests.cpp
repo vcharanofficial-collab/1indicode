@@ -51,5 +51,26 @@ int main() {
     require(errors.diagnostics[0].code == "E-LEX-004", "exponent diagnostic code should be stable");
     require(errors.diagnostics[1].code == "E-LEX-005", "string diagnostic code should be stable");
 
+    const indicode::SourceFile unicode{
+        "unicode.indi",
+        "letter = \"\xC3\xA9\"\nface = \"\\u{1F600}\"\n"
+    };
+    const auto unicode_result = indicode::Lexer(unicode).lex();
+    require(unicode_result.diagnostics.empty(), "valid UTF-8 and Unicode escapes should be accepted");
+
+    const indicode::SourceFile invalid_utf8{"invalid_utf8.indi", "word = \"\xC3(\"\n"};
+    const auto invalid_utf8_result = indicode::Lexer(invalid_utf8).lex();
+    bool saw_utf8_error = false;
+    for (const auto& diagnostic : invalid_utf8_result.diagnostics) {
+        saw_utf8_error = saw_utf8_error || diagnostic.code == "E-LEX-006";
+    }
+    require(saw_utf8_error, "malformed UTF-8 in a string should be diagnosed");
+
+    const indicode::SourceFile invalid_escape{"invalid_escape.indi", "word = \"\\q\"\n"};
+    const auto invalid_escape_result = indicode::Lexer(invalid_escape).lex();
+    require(!invalid_escape_result.diagnostics.empty() &&
+                invalid_escape_result.diagnostics[0].code == "E-LEX-007",
+            "unsupported string escapes should have a stable diagnostic");
+
     std::cout << "Lexer tests passed\n";
 }

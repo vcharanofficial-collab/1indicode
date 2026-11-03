@@ -3,6 +3,7 @@
 #include "indicode/source.hpp"
 
 #include <string>
+#include <vector>
 
 namespace indicode {
 
@@ -17,5 +18,9 @@ struct Diagnostic {
     std::string message;
     SourceSpan span;
 };
+
+std::string format_diagnostic_text(const SourceFile& source, const Diagnostic& diagnostic);
+std::string format_diagnostics_json(const SourceFile& source,
+                                    const std::vector<Diagnostic>& diagnostics);
 
 }

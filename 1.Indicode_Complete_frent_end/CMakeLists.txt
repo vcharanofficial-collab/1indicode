@@ -11,6 +11,7 @@ add_library(indicode_frontend
     src/sema.cpp
     src/ast_printer.cpp
     src/hir.cpp
+    src/diagnostic.cpp
 )
 target_include_directories(indicode_frontend PUBLIC include)
 target_compile_options(indicode_frontend PRIVATE -Wall -Wextra -Wpedantic)
@@ -36,7 +37,17 @@ if(BUILD_TESTING)
     target_link_libraries(indicode_hir_tests PRIVATE indicode_frontend)
     add_test(NAME hir_tests COMMAND indicode_hir_tests)
 
+    add_executable(indicode_diagnostic_tests tests/diagnostic_tests.cpp)
+    target_link_libraries(indicode_diagnostic_tests PRIVATE indicode_frontend)
+    add_test(NAME diagnostic_tests COMMAND indicode_diagnostic_tests)
+
     add_test(NAME cli_check COMMAND indicode check ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/hello.indi)
     add_test(NAME cli_rejects_type_error COMMAND indicode check ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/type_error.indi)
     set_tests_properties(cli_rejects_type_error PROPERTIES WILL_FAIL TRUE)
+    add_test(NAME cli_json_diagnostics
+        COMMAND ${CMAKE_COMMAND}
+            -DINDICODE=$<TARGET_FILE:indicode>
+            -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/type_error.indi
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_json_diagnostics.cmake
+    )
 endif()

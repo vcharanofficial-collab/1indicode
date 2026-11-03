@@ -8,21 +8,21 @@ This phase builds only the Indicode front end, targeting a validated typed repre
 
 ## Completion
 
-**Overall front-end completion: 40%**
+**Overall front-end completion: 60%**
 
-The percentage measures progress toward the complete front-end boundary described in the blueprint, not progress toward LLVM itself or the full AI compiler. It is a weighted estimate: each area's weight is fixed, and completion credit requires implemented, tested, documented acceptance behavior. Before this update, the weighted result was 29.75%. Typed HIR has a 15% weight and is estimated at 65% complete based on initial lowering, verification, printing, CLI use, and tests; that adds 9.75 points. New HIR coverage and beginner/community documentation raise the tests/docs area from 40% to 45%, adding 0.5 points. Current total: 29.75% + 9.75% + 0.5% = 40.0%.
+The percentage measures progress toward the complete front-end boundary described in the blueprint, not progress toward LLVM itself or the full AI compiler. It is a weighted estimate: each area's weight is fixed, and completion credit requires implemented, tested, documented acceptance behavior. The previous measured total was 40.0%. The changes in this update add 20.4 weighted points: richer source diagnostics (+3.5), UTF-8/escape lexer behavior (+4.5), list/index/for-each grammar (+3.0), loop binding resolution (+1.0), collection and Unicode scalar type checks (+2.7), corresponding HIR lowering/verification (+1.95), JSON CLI tooling (+2.25), and tests/docs (+1.5). New total: 40.0% + 20.4% = 60.4%, rounded to **60%**.
 
 | Acceptance area | Weight | Area completion | Evidence / remaining work |
 | --- | --- | --- |
 | Project/build foundation | 5% | 80% | C++20, CMake, and CTest work; install/package/CI acceptance remains. |
-| Source manager and diagnostics | 10% | 20% | Source file, spans, and records exist; owned source manager, UTF-8 validation, line mapping, rich rendering, and JSON output remain. |
-| Lexer | 15% | 35% | Initial ASCII identifiers, selected keywords/operators, comments, newline, number/string tokens and errors; full Unicode, literals, escapes, and trivia remain. |
-| Parser and AST | 15% | 35% | Functions, basic statements, blocks, calls, Pratt operators and a text printer; full grammar, recovery, AST snapshots, for-each, member/index, and named args remain. |
-| Name resolution | 10% | 30% | Local scopes and basic variable/function lookup; declaration phases, globals/modules/imports/visibility and robust symbol identities remain. |
-| Type checking and semantic validation | 15% | 30% | Core scalar inference, same-type operations, mutability, signatures, returns and integer ranges; full conversions, control-flow/effect/ownership and tensor shape rules remain. |
-| Typed HIR and verification | 15% | 65% | Project-owned typed HIR, AST lowering, type/operator/call/return checks, printer, CLI integration, and tests exist; stable symbol IDs, full semantics, serialization, and broader verifier coverage remain. |
-| CLI and diagnostics tooling | 5% | 35% | `check`, `tokens`, `ast`, `typed` plus plain diagnostics; JSON diagnostics, editor interfaces, and stable source snippets/fix-its remain. |
-| Tests, docs, and integration | 10% | 45% | Six CTest cases, the sample, strict community rules, and a beginner roadmap; broad conformance, fuzz/property tests, and CI remain. |
+| Source manager and diagnostics | 10% | 55% | Source spans, source-line/caret rendering, JSON escaping and structured spans; owned source manager, display-width mapping, fix-its and richer JSON schema remain. |
+| Lexer | 15% | 65% | ASCII identifiers, UTF-8 validation in strings, common escapes, Unicode scalar escapes, and recoverable errors; Unicode identifiers, numeric bases/separators/suffixes and trivia remain. |
+| Parser and AST | 15% | 55% | Functions, blocks, calls, precedence, typed lists, indexing and for-each; named args, member access, ranges, full recovery and AST snapshots remain. |
+| Name resolution | 10% | 40% | Lexical scopes, function/variable lookup and scoped for-each bindings; modules/imports, robust symbol identities and global declaration phases remain. |
+| Type checking and semantic validation | 15% | 48% | Scalar inference, list element consistency, list/text indexing, loop element types, mutability, signatures, returns and integer ranges; conversions, ownership/effects and tensor shapes remain. |
+| Typed HIR and verification | 15% | 78% | Project-owned typed HIR covers list literals, indexing and for-each; verifier checks collection/index/loop contracts. Stable IDs, full semantics, serialization/versioning and broader invariant coverage remain. |
+| CLI and diagnostics tooling | 5% | 80% | `check`, `tokens`, `ast`, `typed`, source excerpts/carets and opt-in JSON diagnostics; editor interfaces, fix-its and diagnostics schema stability remain. |
+| Tests, docs, and integration | 10% | 60% | Eight CTest cases, Unicode/collection fixtures, rules, beginner roadmap and updated example; conformance, fuzz/property tests, sanitizers and CI remain. |
 
 ## Work completed
 
@@ -42,15 +42,20 @@ The percentage measures progress toward the complete front-end boundary describe
 - Added project-owned typed HIR types and AST-to-HIR lowering without LLVM headers, libraries, downloads, or build integration.
 - Added an HIR verifier for type annotations, expression structure, operator consistency, call signatures, statement types, and return types; `indicode typed` now prints verified HIR.
 - Added HIR tests for valid lowering/verification, typed output, and rejection of an invalid type annotation.
+- Added source-line/caret text diagnostics and opt-in `--json-diagnostics` with stable codes, escaped messages, file paths, and structured source spans.
+- Added homogeneous list literals, list/text indexing, and `for item in items` for-each loops through AST, semantic checking, HIR, verifier, printer, and CLI.
+- Added UTF-8 validation for string contents, common string escape checks, `\u{...}` Unicode scalar validation, and Char/Text inference by scalar count.
+- Added lexer, semantic, HIR, diagnostic, and JSON CLI regression tests for the new behavior.
+- Documented supported list/iteration/index and Unicode-string rules, including positive/negative examples and current limits.
 - Added strict community contribution rules and a beginner-readable roadmap explaining the LLVM boundary and percentage calculation.
-- The last verified CLI executable measured 352,136 bytes before build artifacts were cleaned; this is not a size guarantee for future builds or a runtime-memory limit.
+- The last verified CLI executable measured 604,824 bytes before its temporary build was cleaned; this is not a size guarantee for future builds or a runtime-memory limit.
 
 ## Current limitations
 
-- Identifiers are ASCII-only. UTF-8 bytes are retained in strings, but Unicode validation and Unicode identifier rules are not implemented.
-- Numeric bases, digit separators, suffixes, complete escape validation, and block comments are not implemented.
+- Identifiers are ASCII-only. UTF-8 is validated in string contents, but Unicode identifier rules and full Unicode display-column mapping are not implemented.
+- Numeric bases, digit separators, suffixes, raw/block comments, and the complete string escape repertoire remain incomplete.
 - Semantic checking is a core subset; numeric widening/conversions, full return-flow analysis, overloads, generics, module resolution, and complete diagnostics rendering remain.
-- Parser coverage is still a subset: for-each loops, member/index expressions, named arguments, complete newline rules, AST printer snapshot tests, and full grammar recovery remain.
+- Parser coverage is still a subset: member access, named arguments, complete newline rules, AST printer snapshot tests, and full grammar recovery remain.
 - Numeric conversion is exact-type-only outside contextual integer literals; floating-point range/precision checks and the complete conversion policy remain.
 - Typed HIR/verifier currently cover the existing language subset only; they need complete semantic coverage, stable symbol identities, stronger validation, serialization/versioning, and conformance tests before an LLVM adapter is ready.
 
@@ -61,12 +66,12 @@ The percentage measures progress toward the complete front-end boundary describe
 3. **Names and types:** add scopes, symbol resolution, core types, inference, conversion/range checks, and diagnostics.
 4. **Core semantic validation:** add function/control-flow checks, mutability rules, and negative tests.
 5. **Typed HIR:** initial lowering, printer, verifier, and tests are implemented; complete semantics, versioning, serialization, and robust invariants remain.
-6. **Front-end CLI and release checks:** `check`, `tokens`, `ast`, and `typed` exist; add JSON diagnostics, full integration/conformance tests, fuzzing, and usage docs.
+6. **Front-end CLI and release checks:** `check`, `tokens`, `ast`, `typed`, and initial JSON diagnostics exist; complete the JSON schema and add full integration/conformance tests, fuzzing, and usage docs.
 
 LLVM/backend work begins only after these front-end milestones are complete and accepted. The front end is being designed to connect to LLVM later without requiring the LLVM framework to be downloaded into this repository now.
 
 ## Latest verification
 
 - A fresh out-of-tree CMake configure/build succeeded with GCC 13.3.
-- All 6 CTest cases passed: lexer, parser, semantic analysis, HIR lowering/verifier, valid CLI check, and expected rejection of a type error; the documented example also passes `indicode check`.
+- All 8 CTest cases passed: lexer, parser, semantic analysis, HIR lowering/verifier, diagnostic formatting, valid CLI check, expected rejection of a type error, and JSON diagnostic CLI validation; the documented example passes `indicode check` and `typed`.
 - The temporary verification build and the project's generated `build/` directory were removed after validation. No compiled artifacts remain in the project folder.

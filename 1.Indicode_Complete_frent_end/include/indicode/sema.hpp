@@ -37,6 +37,7 @@ private:
 
     void add_error(const char* code, const char* message, SourceSpan span);
     bool is_known_type(const std::string& type) const;
+    std::string list_element_type(const std::string& type) const;
     void push_scope();
     void pop_scope();
     Binding* find_binding(const std::string& name);

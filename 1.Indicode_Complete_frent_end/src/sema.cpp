@@ -19,6 +19,14 @@ bool is_numeric_type(const std::string& type) {
     return is_integer_type(type) || type == "Half" || type == "Float" || type == "Double";
 }
 
+std::string get_list_element_type(const std::string& type) {
+    constexpr std::string_view prefix = "List<";
+    if (type.starts_with(prefix) && type.size() > prefix.size() && type.back() == '>') {
+        return type.substr(prefix.size(), type.size() - prefix.size() - 1);
+    }
+    return {};
+}
+
 bool is_integer_literal_expression(const Expr& expression) {
     if (expression.kind == ExprKind::Literal) {
         return !expression.value.empty() && expression.value.front() >= '0' &&
@@ -30,8 +38,25 @@ bool is_integer_literal_expression(const Expr& expression) {
 }
 
 std::string literal_string_type(const std::string& spelling) {
-    const auto length = spelling.size() >= 2 ? spelling.size() - 2 : 0;
-    return length == 1 ? "Char" : "Text";
+    if (spelling.size() < 2) return "Text";
+    std::size_t scalar_count = 0;
+    for (std::size_t index = 1; index + 1 < spelling.size(); ++index) {
+        const auto value = static_cast<unsigned char>(spelling[index]);
+        if (value == '\\') {
+            ++scalar_count;
+            ++index;
+            if (index + 1 < spelling.size() && spelling[index] == 'u' && spelling[index + 1] == '{') {
+                index += 2;
+                while (index + 1 < spelling.size() && spelling[index] != '}') ++index;
+            }
+        } else {
+            ++scalar_count;
+            if ((value & 0xe0) == 0xc0) index += 1;
+            else if ((value & 0xf0) == 0xe0) index += 2;
+            else if ((value & 0xf8) == 0xf0) index += 3;
+        }
+    }
+    return scalar_count == 1 ? "Char" : "Text";
 }
 
 }
@@ -87,10 +112,17 @@ void Analyzer::add_error(const char* code, const char* message, SourceSpan span)
 }
 
 bool Analyzer::is_known_type(const std::string& type) const {
+    if (const auto element_type = list_element_type(type); !element_type.empty()) {
+        return is_known_type(element_type) && element_type != "Void";
+    }
     return type == "Bool" || type == "Byte" || type == "U8" || type == "Int2" ||
            type == "UInt2" || type == "Int" || type == "UInt" || type == "Long" ||
            type == "ULong" || type == "Half" || type == "Float" || type == "Double" ||
            type == "Char" || type == "Text" || type == "Void";
+}
+
+std::string Analyzer::list_element_type(const std::string& type) const {
+    return get_list_element_type(type);
 }
 
 void Analyzer::push_scope() {
@@ -219,6 +251,22 @@ void Analyzer::analyze_statement(Stmt& statement) {
         pop_scope();
         break;
     }
+    case StmtKind::ForEach: {
+        const auto iterable_type = analyze_expression(*statement.expression);
+        const auto element_type = iterable_type == "Text" ? "Char" : list_element_type(iterable_type);
+        if (element_type.empty()) {
+            if (iterable_type != error_type) {
+                add_error("E-SEMA-023", "for-each requires a List<T> or Text value", statement.expression->span);
+            }
+            break;
+        }
+        statement.declared_type = element_type;
+        push_scope();
+        declare_binding(statement.name, {element_type, false, statement.span}, statement.span);
+        analyze_statements(statement.body);
+        pop_scope();
+        break;
+    }
     }
 }
 
@@ -325,6 +373,40 @@ std::string Analyzer::analyze_expression(Expr& expression) {
                     expression.resolved_symbol = expression.value;
                 }
             }
+        }
+        break;
+    }
+    case ExprKind::ListLiteral: {
+        if (expression.arguments.empty()) {
+            add_error("E-SEMA-024", "an empty list needs an explicit element type", expression.span);
+            break;
+        }
+        const auto element_type = analyze_expression(*expression.arguments.front());
+        bool homogeneous = element_type != error_type && element_type != "Void";
+        for (std::size_t index = 1; index < expression.arguments.size(); ++index) {
+            const auto current_type = analyze_expression(*expression.arguments[index]);
+            homogeneous = homogeneous && current_type == element_type;
+        }
+        if (!homogeneous) {
+            add_error("E-SEMA-025", "all list elements must have the same non-Void type", expression.span);
+        } else {
+            type = "List<" + element_type + ">";
+        }
+        break;
+    }
+    case ExprKind::Index: {
+        const auto collection_type = analyze_expression(*expression.left);
+        const auto index_type = analyze_expression(*expression.right);
+        if (index_type != "Int" && index_type != error_type) {
+            add_error("E-SEMA-026", "list index must have type Int", expression.right->span);
+        }
+        const auto element_type = list_element_type(collection_type);
+        if (!element_type.empty()) {
+            type = element_type;
+        } else if (collection_type == "Text") {
+            type = "Char";
+        } else if (collection_type != error_type) {
+            add_error("E-SEMA-027", "indexing requires a List<T> or Text value", expression.left->span);
         }
         break;
     }

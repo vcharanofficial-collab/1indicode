@@ -24,6 +24,9 @@ int main() {
         "}\n"
         "say(\"ready\")\n"
         "repeat 3 times { say(\"go\") }\n"
+        "items = [1, 2, 3]\n"
+        "first = items[0]\n"
+        "for item in items { say(item) }\n"
     };
     const auto lexed = indicode::Lexer(source).lex();
     const auto parsed = indicode::Parser(lexed.tokens).parse();
@@ -44,8 +47,15 @@ int main() {
     require(assignment->expression->right->kind == indicode::ExprKind::Binary &&
                 assignment->expression->right->value == "*",
             "multiplication should bind more tightly than addition");
-    require(parsed.program.statements.size() == 2,
-            "top-level calls and repeat loops should be parsed");
+    require(parsed.program.statements.size() == 5,
+            "calls, repeat/for-each loops, lists, and indexing should be parsed");
+    require(parsed.program.statements[2]->expression->kind == indicode::ExprKind::ListLiteral,
+            "bracketed values should parse as list literals");
+    require(parsed.program.statements[3]->expression->kind == indicode::ExprKind::Index,
+            "postfix brackets should parse as indexing");
+    require(parsed.program.statements[4]->kind == indicode::StmtKind::ForEach &&
+                parsed.program.statements[4]->name == "item",
+            "for-each should retain its iteration binding");
 
     const indicode::SourceFile malformed{"bad.indi", "function broken(a Int) {\n  x = 1 +\n}\n"};
     const auto malformed_tokens = indicode::Lexer(malformed).lex();

@@ -1,6 +1,7 @@
 #include "indicode/lexer.hpp"
 
 #include <array>
+#include <cstdint>
 #include <utility>
 
 namespace indicode {
@@ -17,6 +18,32 @@ bool is_alpha(char value) {
 
 bool is_alphanumeric(char value) {
     return is_alpha(value) || is_digit(value);
+}
+
+int hex_value(char value) {
+    if (value >= '0' && value <= '9') return value - '0';
+    if (value >= 'a' && value <= 'f') return value - 'a' + 10;
+    if (value >= 'A' && value <= 'F') return value - 'A' + 10;
+    return -1;
+}
+
+std::size_t utf8_sequence_length(const std::string& text, std::size_t offset) {
+    const auto first = static_cast<unsigned char>(text[offset]);
+    std::size_t length = 0;
+    if (first >= 0xc2 && first <= 0xdf) length = 2;
+    else if (first >= 0xe0 && first <= 0xef) length = 3;
+    else if (first >= 0xf0 && first <= 0xf4) length = 4;
+    else return 0;
+    if (offset + length > text.size()) return 0;
+
+    const auto second = static_cast<unsigned char>(text[offset + 1]);
+    if ((second & 0xc0) != 0x80) return 0;
+    if ((first == 0xe0 && second < 0xa0) || (first == 0xed && second > 0x9f) ||
+        (first == 0xf0 && second < 0x90) || (first == 0xf4 && second > 0x8f)) return 0;
+    for (std::size_t index = 2; index < length; ++index) {
+        if ((static_cast<unsigned char>(text[offset + index]) & 0xc0) != 0x80) return 0;
+    }
+    return length;
 }
 
 bool is_keyword(const std::string& value) {
@@ -203,6 +230,16 @@ void Lexer::scan_token() {
             scan_identifier(start);
         } else if (is_digit(value)) {
             scan_number(start);
+        } else if (static_cast<unsigned char>(value) >= 0x80) {
+            const auto length = utf8_sequence_length(source_.contents, start.offset);
+            if (length == 0) {
+                add_error("E-LEX-006", "invalid UTF-8 sequence", start);
+                add_token(TokenKind::Invalid, start);
+            } else {
+                for (std::size_t index = 1; index < length; ++index) advance();
+                add_error("E-LEX-008", "non-ASCII identifiers are not supported yet", start);
+                add_token(TokenKind::Invalid, start);
+            }
         } else {
             add_error("E-LEX-003", "unrecognized character", start);
             add_token(TokenKind::Invalid, start);
@@ -254,6 +291,7 @@ void Lexer::scan_number(SourceLocation start) {
 
 void Lexer::scan_string(SourceLocation start) {
     bool terminated = false;
+    bool valid = true;
     while (!at_end()) {
         if (current() == '"') {
             advance();
@@ -264,9 +302,56 @@ void Lexer::scan_string(SourceLocation start) {
             break;
         }
         if (current() == '\\') {
+            const auto escape_start = location();
             advance();
-            if (!at_end()) {
+            if (at_end()) {
+                valid = false;
+                add_error("E-LEX-007", "incomplete string escape", escape_start);
+                break;
+            }
+            const char escape = advance();
+            if (escape == 'u') {
+                std::uint32_t scalar = 0;
+                bool has_digits = false;
+                bool escape_valid = current() == '{';
+                if (escape_valid) {
+                    advance();
+                    while (!at_end() && current() != '}') {
+                        const int digit = hex_value(current());
+                        if (digit < 0 || scalar > 0x10ffff / 16) {
+                            escape_valid = false;
+                        } else {
+                            scalar = scalar * 16 + static_cast<std::uint32_t>(digit);
+                            if (scalar > 0x10ffff) escape_valid = false;
+                        }
+                        has_digits = true;
+                        advance();
+                    }
+                    if (current() == '}') advance();
+                    else escape_valid = false;
+                }
+                if (!has_digits || scalar > 0x10ffff || (scalar >= 0xd800 && scalar <= 0xdfff)) {
+                    escape_valid = false;
+                }
+                if (!escape_valid) {
+                    valid = false;
+                    add_error("E-LEX-007", "invalid Unicode escape; expected a Unicode scalar in \\u{...}",
+                              escape_start);
+                }
+            } else if (escape != '"' && escape != '\\' && escape != 'n' && escape != 'r' &&
+                       escape != 't' && escape != '0') {
+                valid = false;
+                add_error("E-LEX-007", "unsupported string escape", escape_start);
+            }
+        } else if (static_cast<unsigned char>(current()) >= 0x80) {
+            const auto utf8_length = utf8_sequence_length(source_.contents, offset_);
+            if (utf8_length == 0) {
+                const auto invalid_start = location();
                 advance();
+                valid = false;
+                add_error("E-LEX-006", "invalid UTF-8 sequence in string literal", invalid_start);
+            } else {
+                for (std::size_t index = 0; index < utf8_length; ++index) advance();
             }
         } else {
             advance();
@@ -278,7 +363,7 @@ void Lexer::scan_string(SourceLocation start) {
         add_token(TokenKind::Invalid, start);
         return;
     }
-    add_token(TokenKind::StringLiteral, start);
+    add_token(valid ? TokenKind::StringLiteral : TokenKind::Invalid, start);
 }
 
 }

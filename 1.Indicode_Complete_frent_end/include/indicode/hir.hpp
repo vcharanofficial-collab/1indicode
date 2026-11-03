@@ -14,7 +14,9 @@ enum class HirExprKind {
     Literal,
     Unary,
     Binary,
-    Call
+    Call,
+    ListLiteral,
+    Index
 };
 
 struct HirExpr {
@@ -35,7 +37,8 @@ enum class HirStmtKind {
     Expression,
     If,
     While,
-    Repeat
+    Repeat,
+    ForEach
 };
 
 struct HirStmt {

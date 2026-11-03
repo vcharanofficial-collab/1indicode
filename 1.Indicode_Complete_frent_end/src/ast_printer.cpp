@@ -40,6 +40,21 @@ void print_expression(std::ostringstream& output, const Expr& expression, bool i
         }
         output << ')';
         break;
+    case ExprKind::ListLiteral:
+        output << "List[";
+        for (std::size_t index = 0; index < expression.arguments.size(); ++index) {
+            if (index != 0) output << ", ";
+            print_expression(output, *expression.arguments[index], include_types);
+        }
+        output << ']';
+        break;
+    case ExprKind::Index:
+        output << "Index(";
+        print_expression(output, *expression.left, include_types);
+        output << ", ";
+        print_expression(output, *expression.right, include_types);
+        output << ')';
+        break;
     }
     if (include_types && !expression.inferred_type.empty()) {
         output << ':' << expression.inferred_type;
@@ -103,6 +118,12 @@ void print_statements(std::ostringstream& output,
             output << "repeat ";
             print_expression(output, *statement->expression, include_types);
             output << " times\n";
+            print_statements(output, statement->body, depth + 1, include_types);
+            break;
+        case StmtKind::ForEach:
+            output << "for " << statement->name << " in ";
+            print_expression(output, *statement->expression, include_types);
+            output << "\n";
             print_statements(output, statement->body, depth + 1, include_types);
             break;
         }

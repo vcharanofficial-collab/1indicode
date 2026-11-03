@@ -67,11 +67,24 @@ bool is_numeric_type(const std::string& type) {
 }
 
 bool is_known_type(const std::string& type) {
+    constexpr std::string_view list_prefix = "List<";
+    if (type.starts_with(list_prefix) && type.size() > list_prefix.size() && type.back() == '>') {
+        const auto element_type = type.substr(list_prefix.size(), type.size() - list_prefix.size() - 1);
+        return is_known_type(element_type) && element_type != "Void";
+    }
     static const std::unordered_set<std::string> types{
         "Bool", "Byte", "U8", "Int2", "UInt2", "Int", "UInt", "Long", "ULong",
         "Half", "Float", "Double", "Char", "Text", "Void"
     };
     return types.contains(type);
+}
+
+std::string list_element_type(const std::string& type) {
+    constexpr std::string_view list_prefix = "List<";
+    if (type.starts_with(list_prefix) && type.size() > list_prefix.size() && type.back() == '>') {
+        return type.substr(list_prefix.size(), type.size() - list_prefix.size() - 1);
+    }
+    return {};
 }
 
 }
@@ -215,6 +228,37 @@ std::vector<Diagnostic> verify_hir(const HirProgram& program) {
             }
             break;
         }
+        case HirExprKind::ListLiteral: {
+            if (expression.arguments.empty()) {
+                diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-019",
+                                       "typed list must have at least one element", expression.span});
+                break;
+            }
+            const auto element_type = verify_expression(*expression.arguments.front());
+            bool matches = !element_type.empty() && element_type != "Void" &&
+                           expression.type == "List<" + element_type + ">";
+            for (std::size_t index = 1; index < expression.arguments.size(); ++index) {
+                matches = matches && verify_expression(*expression.arguments[index]) == element_type;
+            }
+            if (!matches) {
+                diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-020",
+                                       "list elements do not match the list's declared element type", expression.span});
+            }
+            break;
+        }
+        case HirExprKind::Index: {
+            const auto collection_type = child_type(expression.left);
+            const auto index_type = child_type(expression.right);
+            const auto element_type = list_element_type(collection_type);
+            const bool valid_list = !element_type.empty() && expression.type == element_type;
+            const bool valid_text = collection_type == "Text" && expression.type == "Char";
+            if (index_type != "Int" || (!valid_list && !valid_text)) {
+                diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-021",
+                                       "index operation has inconsistent collection, index, or result types",
+                                       expression.span});
+            }
+            break;
+        }
         }
         return expression.type;
     };
@@ -266,6 +310,15 @@ std::vector<Diagnostic> verify_hir(const HirProgram& program) {
                                            "repeat count must have an integer type", statement->span});
                 }
                 break;
+            case HirStmtKind::ForEach: {
+                const auto element_type = value_type == "Text" ? "Char" : list_element_type(value_type);
+                if (statement->name.empty() || element_type.empty() || statement->type != element_type) {
+                    diagnostics.push_back({DiagnosticSeverity::Error, "E-HIR-022",
+                                           "for-each binding does not match its iterable element type",
+                                           statement->span});
+                }
+                break;
+            }
             }
             verify_statements(statement->body, return_type);
             verify_statements(statement->else_body, return_type);
@@ -309,6 +362,21 @@ std::string print_hir(const HirProgram& program) {
                 print_expression(*expression.arguments[index]);
             }
             output << ") : " << expression.type;
+            break;
+        case HirExprKind::ListLiteral:
+            output << "list<" << expression.type << ">[";
+            for (std::size_t index = 0; index < expression.arguments.size(); ++index) {
+                if (index != 0) output << ", ";
+                print_expression(*expression.arguments[index]);
+            }
+            output << ']';
+            break;
+        case HirExprKind::Index:
+            output << "index ";
+            print_expression(*expression.left);
+            output << '[';
+            print_expression(*expression.right);
+            output << "] : " << expression.type;
             break;
         }
     };
@@ -356,6 +424,12 @@ std::string print_hir(const HirProgram& program) {
                 break;
             case HirStmtKind::Repeat:
                 output << "repeat "; print_expression(*statement->expression); output << " times\n";
+                print_statements(statement->body, depth + 1);
+                break;
+            case HirStmtKind::ForEach:
+                output << "for %" << statement->name << ": " << statement->type << " in ";
+                print_expression(*statement->expression);
+                output << '\n';
                 print_statements(statement->body, depth + 1);
                 break;
             }

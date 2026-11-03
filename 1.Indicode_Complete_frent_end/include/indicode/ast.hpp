@@ -13,7 +13,9 @@ enum class ExprKind {
     Literal,
     Unary,
     Binary,
-    Call
+    Call,
+    ListLiteral,
+    Index
 };
 
 struct Expr {
@@ -34,7 +36,8 @@ enum class StmtKind {
     Expression,
     If,
     While,
-    Repeat
+    Repeat,
+    ForEach
 };
 
 struct Stmt {

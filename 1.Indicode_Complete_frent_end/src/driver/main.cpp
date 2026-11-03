@@ -1,4 +1,5 @@
 #include "indicode/ast.hpp"
+#include "indicode/hir.hpp"
 #include "indicode/lexer.hpp"
 #include "indicode/parser.hpp"
 #include "indicode/sema.hpp"
@@ -81,8 +82,14 @@ int main(int argc, char** argv) {
         print_diagnostics(source, analyzed.diagnostics);
         return 1;
     }
+    auto hir = indicode::lower_to_hir(parsed.program);
+    const auto hir_diagnostics = indicode::verify_hir(hir);
+    if (!hir_diagnostics.empty()) {
+        print_diagnostics(source, hir_diagnostics);
+        return 1;
+    }
     if (command == "typed") {
-        std::cout << indicode::print_program(parsed.program, true);
+        std::cout << indicode::print_hir(hir);
     } else {
         std::cout << "ok: " << source.name << '\n';
     }

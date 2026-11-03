@@ -8,9 +8,9 @@ This phase builds only the Indicode front end, targeting a validated typed repre
 
 ## Completion
 
-**Overall front-end completion: 30%**
+**Overall front-end completion: 40%**
 
-The percentage measures progress toward the complete front-end boundary described in the blueprint, not progress toward LLVM itself or the full AI compiler. It is a weighted estimate: each area has a fixed weight, and its completion estimate is based on implemented, tested, documented acceptance behavior. The weighted result is 29.75%, rounded to 30%.
+The percentage measures progress toward the complete front-end boundary described in the blueprint, not progress toward LLVM itself or the full AI compiler. It is a weighted estimate: each area's weight is fixed, and completion credit requires implemented, tested, documented acceptance behavior. Before this update, the weighted result was 29.75%. Typed HIR has a 15% weight and is estimated at 65% complete based on initial lowering, verification, printing, CLI use, and tests; that adds 9.75 points. New HIR coverage and beginner/community documentation raise the tests/docs area from 40% to 45%, adding 0.5 points. Current total: 29.75% + 9.75% + 0.5% = 40.0%.
 
 | Acceptance area | Weight | Area completion | Evidence / remaining work |
 | --- | --- | --- |
@@ -20,9 +20,9 @@ The percentage measures progress toward the complete front-end boundary describe
 | Parser and AST | 15% | 35% | Functions, basic statements, blocks, calls, Pratt operators and a text printer; full grammar, recovery, AST snapshots, for-each, member/index, and named args remain. |
 | Name resolution | 10% | 30% | Local scopes and basic variable/function lookup; declaration phases, globals/modules/imports/visibility and robust symbol identities remain. |
 | Type checking and semantic validation | 15% | 30% | Core scalar inference, same-type operations, mutability, signatures, returns and integer ranges; full conversions, control-flow/effect/ownership and tensor shape rules remain. |
-| Typed HIR and verification | 15% | 0% | Current types annotate AST nodes; separate typed HIR, lowering, and IR verifier are not implemented. |
+| Typed HIR and verification | 15% | 65% | Project-owned typed HIR, AST lowering, type/operator/call/return checks, printer, CLI integration, and tests exist; stable symbol IDs, full semantics, serialization, and broader verifier coverage remain. |
 | CLI and diagnostics tooling | 5% | 35% | `check`, `tokens`, `ast`, `typed` plus plain diagnostics; JSON diagnostics, editor interfaces, and stable source snippets/fix-its remain. |
-| Tests, docs, and integration | 10% | 40% | Five CTest cases and a sample; broad conformance, fuzz/property tests, and CI remain. |
+| Tests, docs, and integration | 10% | 45% | Six CTest cases, the sample, strict community rules, and a beginner roadmap; broad conformance, fuzz/property tests, and CI remain. |
 
 ## Work completed
 
@@ -39,6 +39,10 @@ The percentage measures progress toward the complete front-end boundary describe
 - Added a source-oriented AST/typed-tree printer and documented local build and command usage.
 - Added context-typed integer literals with range checks for Byte/U8, Int2/UInt2, Int/UInt, and Long/ULong; signed minimum values are checked without overflow.
 - Added `examples/hello.indi` as the first runnable end-to-end front-end sample.
+- Added project-owned typed HIR types and AST-to-HIR lowering without LLVM headers, libraries, downloads, or build integration.
+- Added an HIR verifier for type annotations, expression structure, operator consistency, call signatures, statement types, and return types; `indicode typed` now prints verified HIR.
+- Added HIR tests for valid lowering/verification, typed output, and rejection of an invalid type annotation.
+- Added strict community contribution rules and a beginner-readable roadmap explaining the LLVM boundary and percentage calculation.
 - The last verified CLI executable measured 352,136 bytes before build artifacts were cleaned; this is not a size guarantee for future builds or a runtime-memory limit.
 
 ## Current limitations
@@ -48,7 +52,7 @@ The percentage measures progress toward the complete front-end boundary describe
 - Semantic checking is a core subset; numeric widening/conversions, full return-flow analysis, overloads, generics, module resolution, and complete diagnostics rendering remain.
 - Parser coverage is still a subset: for-each loops, member/index expressions, named arguments, complete newline rules, AST printer snapshot tests, and full grammar recovery remain.
 - Numeric conversion is exact-type-only outside contextual integer literals; floating-point range/precision checks and the complete conversion policy remain.
-- A separate typed HIR and verifier are required before the front end can be called ready for a future LLVM adapter; current inferred types are attached to AST nodes only.
+- Typed HIR/verifier currently cover the existing language subset only; they need complete semantic coverage, stable symbol identities, stronger validation, serialization/versioning, and conformance tests before an LLVM adapter is ready.
 
 ## Milestones
 
@@ -56,13 +60,13 @@ The percentage measures progress toward the complete front-end boundary describe
 2. **Parser and AST:** implement the documented core grammar, precedence, source spans, AST printer, and recovery tests.
 3. **Names and types:** add scopes, symbol resolution, core types, inference, conversion/range checks, and diagnostics.
 4. **Core semantic validation:** add function/control-flow checks, mutability rules, and negative tests.
-5. **Typed HIR:** lower valid source to typed HIR and verify invariants.
-6. **Front-end CLI and release checks:** provide `check`, `tokens`, `ast`, and `typed`; add JSON diagnostics, integration tests, and usage docs.
+5. **Typed HIR:** initial lowering, printer, verifier, and tests are implemented; complete semantics, versioning, serialization, and robust invariants remain.
+6. **Front-end CLI and release checks:** `check`, `tokens`, `ast`, and `typed` exist; add JSON diagnostics, full integration/conformance tests, fuzzing, and usage docs.
 
 LLVM/backend work begins only after these front-end milestones are complete and accepted. The front end is being designed to connect to LLVM later without requiring the LLVM framework to be downloaded into this repository now.
 
 ## Latest verification
 
 - A fresh out-of-tree CMake configure/build succeeded with GCC 13.3.
-- All 5 CTest cases passed: lexer, parser, semantic analysis, valid CLI check, and expected rejection of a type error; the documented example also passes `indicode check`.
+- All 6 CTest cases passed: lexer, parser, semantic analysis, HIR lowering/verifier, valid CLI check, and expected rejection of a type error; the documented example also passes `indicode check`.
 - The temporary verification build and the project's generated `build/` directory were removed after validation. No compiled artifacts remain in the project folder.
